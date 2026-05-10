@@ -1,0 +1,24 @@
+{
+  "$schema": "https://developers.reddit.com/schema/devvit.json",
+  "name": "keyqueue",
+  "version": "0.1.0",
+  "entry": "src/main.ts",
+  "permissions": {
+    "redditAPI": true,
+    "redis": true,
+    "scheduler": true,
+    "settings": true
+  },
+  "menu": [
+    {
+      "label": "Open KeyQueue",
+      "location": "subreddit",
+      "forUserType": "moderator",
+      "action": "open_keyqueue"
+    }
+  ],
+  "web": {
+    "entry": "src/server/index.ts",
+    "client": "src/client"
+  }
+}
