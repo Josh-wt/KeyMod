@@ -69,7 +69,7 @@ export const api = {
     request<{ ok: true }>('/api/ban', { method: 'POST', body: JSON.stringify({ username, duration, reason, message, note, context }) }),
   flairs: () => request<{ flairs: Array<{ id: string; text?: string; name?: string }> }>('/api/flairs'),
   flair: (postId: string, flairId: string) =>
-    request<{ ok: true }>('/api/flair', { method: 'POST', body: JSON.stringify({ postId, flairId }) }),
+    request<{ ok: true; flairText?: string }>('/api/flair', { method: 'POST', body: JSON.stringify({ postId, flairId }) }),
   note: (username: string, note: string, redditId?: string) =>
     request<{ ok: true }>('/api/note', { method: 'POST', body: JSON.stringify({ username, note, redditId }) }),
   user: (username: string) => request<UserInfo>(`/api/user/${encodeURIComponent(username)}`),

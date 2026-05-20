@@ -4,6 +4,7 @@ import type { QueueItem } from '../../shared';
 import { compactNumber, feedAge, subredditInitials } from '../feedUtils';
 import type { ModItemHandlers } from '../modActions';
 import { ModActions } from './ModActions';
+import { QueueMeta } from './QueueMeta';
 
 type Props = {
   item: QueueItem;
@@ -28,6 +29,8 @@ export function FeedComment({ item, modHandlers, menuOpen = false, onMenuOpenCha
             <span>{feedAge(item.createdAt)} ago</span>
           </div>
         </header>
+
+        <QueueMeta item={item} />
 
         <p className="feed-comment-text">{item.body || item.title}</p>
 

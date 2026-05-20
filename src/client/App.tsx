@@ -430,7 +430,10 @@ export default function App() {
             setModalItem(null);
           }}
           onSelect={async (flairId) => {
-            await api.flair(actionItem.id, flairId);
+            const response = await api.flair(actionItem.id, flairId);
+            if (response.flairText !== undefined) {
+              queue.patchItem(actionItem.id, { flairText: response.flairText || undefined });
+            }
             setModal(null);
             setModalItem(null);
             addToast('Flair applied.', 'success');
