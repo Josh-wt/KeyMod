@@ -2,8 +2,10 @@ import { memo, type MouseEvent } from 'react';
 import { Check } from 'lucide-react';
 import type { QueueItem as QueueItemType } from '../../shared';
 import type { ModItemHandlers } from '../modActions';
+import { reportCount } from '../queueReports';
 import { FeedComment } from './FeedComment';
 import { FeedPostCard, feedPostFromItem, feedPostFromParent } from './FeedPostCard';
+import { QueueReportTags } from './QueueReportTags';
 
 type Props = {
   item: QueueItemType;
@@ -40,10 +42,12 @@ export const QueueItem = memo(function QueueItem({
 }: Props) {
   const isComment = item.type === 'comment';
   const parentPost = item.parentPost;
+  const hasReports = reportCount(item) > 0;
+  const showPostReports = !isComment && hasReports;
 
   return (
     <article
-      className={`queue-row${focused ? ' focused' : ''}${selected ? ' selected' : ''}${dragPreviewed ? ' drag-previewed' : ''}${isComment ? ' queue-row-comment' : ''}`}
+      className={`queue-row${showPostReports ? ' queue-row-reported' : ''}${focused ? ' focused' : ''}${selected ? ' selected' : ''}${dragPreviewed ? ' drag-previewed' : ''}${isComment ? ' queue-row-comment' : ''}`}
       data-queue-id={item.id}
       onMouseDown={(event) => {
         if ((event.target as Element).closest('[data-mod-trigger], .check-button, .mod-actions-menu-portal')) return;
@@ -52,6 +56,7 @@ export const QueueItem = memo(function QueueItem({
       onMouseEnter={() => onFocusIndex(index)}
       onMouseOver={() => onDragUpdate(index)}
     >
+      {showPostReports ? <QueueReportTags item={item} /> : null}
       <button
         className={`check-button${selected || dragPreviewed ? ' checked' : ''}${dragPreviewed && !selected ? ' preview' : ''}`}
         aria-label={selected ? 'Deselect item' : 'Select item'}
@@ -65,20 +70,26 @@ export const QueueItem = memo(function QueueItem({
       </button>
 
       {isComment ? (
-        <div className="comment-queue-stack">
+        <div className={`comment-queue-stack${parentPost ? ' comment-queue-stack-threaded' : ''}`}>
           {parentPost ? (
-            <div className="crosspost-shell">
-              <span className="crosspost-label">Comment in thread</span>
-              <FeedPostCard post={feedPostFromParent(parentPost)} variant="embedded" onStop={stop} />
+            <div className="comment-thread-parent">
+              <div className="comment-thread-gutter" aria-hidden="true" />
+              <div className="crosspost-shell">
+                <span className="crosspost-label">Comment in thread</span>
+                <FeedPostCard post={feedPostFromParent(parentPost)} variant="embedded" onStop={stop} />
+              </div>
             </div>
           ) : null}
-          <FeedComment
-            item={item}
-            modHandlers={modHandlers}
-            menuOpen={menuOpen}
-            onMenuOpenChange={onMenuOpenChange}
-            onStop={stop}
-          />
+          <div className="comment-thread-reply">
+            {parentPost ? <div className="comment-thread-gutter" aria-hidden="true" /> : null}
+            <FeedComment
+              item={item}
+              modHandlers={modHandlers}
+              menuOpen={menuOpen}
+              onMenuOpenChange={onMenuOpenChange}
+              onStop={stop}
+            />
+          </div>
         </div>
       ) : (
         <FeedPostCard

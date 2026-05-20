@@ -14,7 +14,6 @@ export type FeedPostSource = {
   author?: string;
   createdAt?: number;
   body?: string;
-  flairText?: string;
   previewUrl?: string;
   thumbnail?: string;
   url?: string;
@@ -47,7 +46,6 @@ export function feedPostFromItem(item: QueueItem): FeedPostSource {
     createdAt: item.createdAt,
     title: item.title,
     body: item.body,
-    flairText: item.flairText,
     previewUrl: item.previewUrl,
     thumbnail: item.thumbnail,
     url: item.url,
@@ -102,7 +100,6 @@ export function FeedPostCard({
         <div className="feed-post-meta">
           <strong>r/{post.subreddit}</strong>
           {post.createdAt ? <span className="feed-post-time">{feedAge(post.createdAt)} ago</span> : null}
-          {post.flairText ? <span className="feed-post-flair">{post.flairText}</span> : null}
           {headerExtra}
         </div>
       </header>

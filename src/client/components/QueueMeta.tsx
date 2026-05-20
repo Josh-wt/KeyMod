@@ -4,18 +4,7 @@ type Props = {
   item: QueueItem;
 };
 
-function reportCount(item: QueueItem): number {
-  return Math.max(item.numReports, item.reportReasons.length);
-}
-
-function uniqueReasons(reasons: string[]): string[] {
-  return [...new Set(reasons.map((reason) => reason.trim()).filter(Boolean))];
-}
-
 export function QueueMeta({ item }: Props) {
-  const reasons = uniqueReasons(item.reportReasons);
-  const count = reportCount(item);
-  const hasReports = count > 0;
   const status: Array<{ key: string; label: string }> = [];
 
   if (item.locked) status.push({ key: 'locked', label: 'Locked' });
@@ -28,36 +17,17 @@ export function QueueMeta({ item }: Props) {
     status.push({ key: 'cc', label: `Crowd ${item.crowdControlLevel.toLowerCase()}` });
   }
 
-  if (!hasReports && !status.length) return null;
+  if (!status.length) return null;
 
   return (
     <div className="queue-meta" aria-label="Moderation metadata">
-      {hasReports ? (
-        <div className="queue-meta-reports">
-          <span className="queue-report-indicator" aria-hidden="true" />
-          <span className="queue-report-summary">
-            {count} {count === 1 ? 'report' : 'reports'}
+      <div className="queue-meta-status">
+        {status.map((entry) => (
+          <span key={entry.key} className="queue-status-tag">
+            {entry.label}
           </span>
-          {reasons.length ? (
-            <span className="queue-report-reasons">
-              {reasons.map((reason) => (
-                <span key={reason} className="queue-report-reason">
-                  {reason}
-                </span>
-              ))}
-            </span>
-          ) : null}
-        </div>
-      ) : null}
-      {status.length ? (
-        <div className="queue-meta-status">
-          {status.map((entry) => (
-            <span key={entry.key} className="queue-status-tag">
-              {entry.label}
-            </span>
-          ))}
-        </div>
-      ) : null}
+        ))}
+      </div>
     </div>
   );
 }

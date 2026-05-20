@@ -1,10 +1,12 @@
 import { useRef, type MouseEvent } from 'react';
-import { ArrowBigDown, ArrowBigUp, MessageCircle } from 'lucide-react';
+import { ArrowBigDown, ArrowBigUp } from 'lucide-react';
 import type { QueueItem } from '../../shared';
 import { compactNumber, feedAge, subredditInitials } from '../feedUtils';
 import type { ModItemHandlers } from '../modActions';
+import { reportCount } from '../queueReports';
 import { ModActions } from './ModActions';
 import { QueueMeta } from './QueueMeta';
+import { QueueReportTags } from './QueueReportTags';
 
 type Props = {
   item: QueueItem;
@@ -15,43 +17,45 @@ type Props = {
 };
 
 export function FeedComment({ item, modHandlers, menuOpen = false, onMenuOpenChange, onStop }: Props) {
-  const hostRef = useRef<HTMLDivElement>(null);
+  const hostRef = useRef<HTMLElement>(null);
   const showModActions = Boolean(modHandlers && onMenuOpenChange);
+  const hasReports = reportCount(item) > 0;
 
   return (
-    <article ref={hostRef} className={`feed-comment${showModActions ? ' feed-comment-with-mod' : ''}`}>
-      <div className="feed-comment-thread-line" aria-hidden="true" />
-      <div className="feed-comment-body">
-        <header className="feed-comment-header">
-          <div className="comment-avatar">{subredditInitials(item.author)}</div>
-          <div className="feed-comment-meta">
-            <strong>u/{item.author}</strong>
-            <span>{feedAge(item.createdAt)} ago</span>
-          </div>
-        </header>
+    <article
+      ref={hostRef}
+      className={`feed-comment-card${hasReports ? ' feed-comment-reported' : ''}${showModActions ? ' feed-comment-with-mod' : ''}`}
+    >
+      {hasReports ? <QueueReportTags item={item} /> : null}
+      <header className="feed-comment-header">
+        <div className="comment-avatar">{subredditInitials(item.author)}</div>
+        <div className="feed-comment-meta">
+          <strong>u/{item.author}</strong>
+          <span>{feedAge(item.createdAt)} ago</span>
+        </div>
+      </header>
 
-        <QueueMeta item={item} />
+      <QueueMeta item={item} />
 
-        <p className="feed-comment-text">{item.body || item.title}</p>
+      <p className="feed-comment-text">{item.body || item.title}</p>
 
-        <footer className="feed-comment-actions">
-          <span className="vote-pill vote-pill-compact">
-            <ArrowBigUp size={16} />
-            {compactNumber(item.score)}
-            <ArrowBigDown size={16} />
-          </span>
-          {showModActions ? (
-            <ModActions
-              item={item}
-              menuOpen={menuOpen}
-              onMenuOpenChange={onMenuOpenChange!}
-              handlers={modHandlers!}
-              hostRef={hostRef}
-              onStop={onStop}
-            />
-          ) : null}
-        </footer>
-      </div>
+      <footer className="feed-comment-actions">
+        <span className="vote-pill vote-pill-compact">
+          <ArrowBigUp size={16} />
+          {compactNumber(item.score)}
+          <ArrowBigDown size={16} />
+        </span>
+        {showModActions ? (
+          <ModActions
+            item={item}
+            menuOpen={menuOpen}
+            onMenuOpenChange={onMenuOpenChange!}
+            handlers={modHandlers!}
+            hostRef={hostRef}
+            onStop={onStop}
+          />
+        ) : null}
+      </footer>
     </article>
   );
 }
