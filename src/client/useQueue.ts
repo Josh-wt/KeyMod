@@ -73,6 +73,13 @@ export function useQueue(addToast: (message: string, kind?: 'info' | 'warning' |
     }));
   }, []);
 
+  const focusIndex = useCallback((index: number) => {
+    setState((current) => ({
+      ...current,
+      focusedIndex: Math.max(0, Math.min(current.items.length - 1, index)),
+    }));
+  }, []);
+
   const toggleSelected = useCallback((id: string) => {
     setState((current) => {
       const selectedIds = new Set(current.selectedIds);
@@ -134,24 +141,53 @@ export function useQueue(addToast: (message: string, kind?: 'info' | 'warning' |
     });
   }, []);
 
-  const markRemoved = useCallback((ids: string[], batchId: string) => {
+  const dismissIds = useCallback((ids: string[]) => {
+    setState((current) => {
+      const nextItems = current.items.filter((item) => !ids.includes(item.id));
+      return {
+        ...current,
+        items: nextItems,
+        selectedIds: new Set([...current.selectedIds].filter((id) => !ids.includes(id))),
+        dragPreviewIds: new Set([...current.dragPreviewIds].filter((id) => !ids.includes(id))),
+        focusedIndex: Math.min(current.focusedIndex, Math.max(0, nextItems.length - 1)),
+      };
+    });
+  }, []);
+
+  const markRemoved = useCallback(
+    (ids: string[], batchId: string) => {
+      setState((current) => {
+        const nextItems = current.items.filter((item) => !ids.includes(item.id));
+        return {
+          ...current,
+          items: nextItems,
+          selectedIds: new Set([...current.selectedIds].filter((id) => !ids.includes(id))),
+          dragPreviewIds: new Set([...current.dragPreviewIds].filter((id) => !ids.includes(id))),
+          lastBatchId: batchId,
+          undoCountdown: 10,
+          focusedIndex: Math.min(current.focusedIndex, Math.max(0, nextItems.length - 1)),
+        };
+      });
+    },
+    [],
+  );
+
+  const markApproved = useCallback(
+    (ids: string[]) => {
+      dismissIds(ids);
+    },
+    [dismissIds],
+  );
+
+  const patchItem = useCallback((id: string, patch: Partial<QueueItem>) => {
     setState((current) => ({
       ...current,
-      items: current.items.filter((item) => !ids.includes(item.id)),
-      selectedIds: new Set([...current.selectedIds].filter((id) => !ids.includes(id))),
-      dragPreviewIds: new Set([...current.dragPreviewIds].filter((id) => !ids.includes(id))),
-      lastBatchId: batchId,
-      undoCountdown: 10,
-      focusedIndex: Math.min(current.focusedIndex, Math.max(0, current.items.length - ids.length - 1)),
+      items: current.items.map((item) => (item.id === id ? { ...item, ...patch } : item)),
     }));
   }, []);
 
   const clearUndo = useCallback(() => {
     setState((current) => ({ ...current, lastBatchId: null, undoCountdown: null }));
-  }, []);
-
-  const setCountdown = useCallback((undoCountdown: number | null) => {
-    setState((current) => ({ ...current, undoCountdown }));
   }, []);
 
   return {
@@ -160,6 +196,7 @@ export function useQueue(addToast: (message: string, kind?: 'info' | 'warning' |
     targetIds,
     load,
     moveFocus,
+    focusIndex,
     toggleSelected,
     toggleFocused,
     selectIds,
@@ -167,7 +204,8 @@ export function useQueue(addToast: (message: string, kind?: 'info' | 'warning' |
     updateDrag,
     endDrag,
     markRemoved,
+    markApproved,
+    patchItem,
     clearUndo,
-    setCountdown,
   };
 }

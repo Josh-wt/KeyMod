@@ -1,4 +1,4 @@
-import type { AppSettings, KeyAction, Keymap, RemovalReason } from './shared';
+import type { AppSettings, BanReason, KeyAction, Keymap, RemovalReason } from './shared';
 
 export const DEFAULT_KEYMAP: Keymap = {
   approve: 's',
@@ -28,30 +28,6 @@ export const KEY_SETTING_BY_ACTION: Record<KeyAction, string> = {
   help: 'key_help',
 };
 
-export const settingDefinitions = [
-  ...Array.from({ length: 9 }, (_, i) => ({
-    name: `removal_reason_${i + 1}`,
-    label: `Removal reason ${i + 1}`,
-    type: 'string',
-    scope: 'installation',
-    defaultValue: '',
-  })),
-  ...Array.from({ length: 9 }, (_, i) => ({
-    name: `removal_reason_flair_${i + 1}`,
-    label: `Removal reason ${i + 1} flair ID`,
-    type: 'string',
-    scope: 'installation',
-    defaultValue: '',
-  })),
-  ...Object.entries(KEY_SETTING_BY_ACTION).map(([action, name]) => ({
-    name,
-    label: `Key binding: ${action}`,
-    type: 'string',
-    scope: 'installation',
-    defaultValue: DEFAULT_KEYMAP[action as KeyAction],
-  })),
-] as const;
-
 export function normalizeKey(value: unknown, fallback: string): string {
   if (typeof value !== 'string' || value.length === 0) return fallback;
   if (value === 'Space' || value === 'space') return ' ';
@@ -73,36 +49,44 @@ export function detectKeyConflicts(keymap: Keymap): Array<{ key: string; actions
   return conflicts;
 }
 
-export async function resolveSettings(settingsApi?: {
-  get?: (name: string) => Promise<unknown>;
-  getAll?: () => Promise<Record<string, unknown>>;
+export async function resolveSettings(settingsApi: {
+  getAll(): Promise<Record<string, unknown>>;
 }): Promise<AppSettings> {
-  const raw = settingsApi?.getAll ? await settingsApi.getAll() : {};
-  const get = async (name: string): Promise<unknown> => {
-    if (name in raw) return raw[name];
-    return settingsApi?.get ? settingsApi.get(name) : undefined;
-  };
+  const raw = await settingsApi.getAll();
 
   const keymap = {} as Keymap;
   for (const [action, settingName] of Object.entries(KEY_SETTING_BY_ACTION)) {
-    const fallback = DEFAULT_KEYMAP[action as KeyAction];
-    keymap[action as KeyAction] = normalizeKey(await get(settingName), fallback);
+    keymap[action as KeyAction] = normalizeKey(raw[settingName], DEFAULT_KEYMAP[action as KeyAction]);
   }
 
   const removalReasons: RemovalReason[] = [];
+  const banReasons: BanReason[] = [];
   for (let index = 1; index <= 9; index += 1) {
-    const text = await get(`removal_reason_${index}`);
-    const flairId = await get(`removal_reason_flair_${index}`);
+    const text = raw[`removal_reason_${index}`];
+    const flairId = raw[`removal_reason_flair_${index}`];
     removalReasons.push({
       index,
       text: typeof text === 'string' ? text : '',
       flairId: typeof flairId === 'string' ? flairId : '',
+    });
+
+    const reason = raw[`ban_reason_${index}`];
+    const message = raw[`ban_message_${index}`];
+    const note = raw[`ban_note_${index}`];
+    const duration = raw[`ban_duration_${index}`];
+    banReasons.push({
+      index,
+      reason: typeof reason === 'string' ? reason : '',
+      message: typeof message === 'string' ? message : '',
+      note: typeof note === 'string' ? note : '',
+      duration: typeof duration === 'number' && Number.isFinite(duration) ? Math.max(0, Math.min(999, duration)) : 0,
     });
   }
 
   return {
     keymap,
     removalReasons,
+    banReasons,
     conflicts: detectKeyConflicts(keymap),
   };
 }

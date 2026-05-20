@@ -1,5 +1,24 @@
 export type QueueKind = 'post' | 'comment';
 
+export type CrowdControlLevel = 'OFF' | 'LENIENT' | 'MEDIUM' | 'STRICT';
+
+export type ParentPostContext = {
+  id: string;
+  title: string;
+  permalink: string;
+  subreddit: string;
+  author?: string;
+  createdAt?: number;
+  body?: string;
+  score?: number;
+  numComments?: number;
+  thumbnail?: string;
+  previewUrl?: string;
+  url?: string;
+  domain?: string;
+  subredditIcon?: string;
+};
+
 export type QueueItem = {
   id: string;
   type: QueueKind;
@@ -12,6 +31,23 @@ export type QueueItem = {
   createdAt: number;
   reportReasons: string[];
   numReports: number;
+  score?: number;
+  numComments?: number;
+  flairText?: string;
+  thumbnail?: string;
+  previewUrl?: string;
+  url?: string;
+  domain?: string;
+  subredditIcon?: string;
+  postId?: string;
+  parentPostTitle?: string;
+  parentPostPermalink?: string;
+  parentPost?: ParentPostContext;
+  locked?: boolean;
+  nsfw?: boolean;
+  spoiler?: boolean;
+  stickied?: boolean;
+  crowdControlLevel?: CrowdControlLevel;
 };
 
 export type KeyAction =
@@ -35,9 +71,18 @@ export type RemovalReason = {
   flairId: string;
 };
 
+export type BanReason = {
+  index: number;
+  reason: string;
+  message: string;
+  note: string;
+  duration: number;
+};
+
 export type AppSettings = {
   keymap: Keymap;
   removalReasons: RemovalReason[];
+  banReasons: BanReason[];
   conflicts: Array<{ key: string; actions: string[] }>;
 };
 
@@ -47,7 +92,29 @@ export type UserInfo = {
   combinedKarma: number;
   recentInSub: number;
   priorRemovals: number;
-  recentActivity: Array<{ id: string; title: string; permalink: string; createdAt: number }>;
+  recentActivity: UserActivityItem[];
+  recentPosts: UserActivityItem[];
+  recentComments: UserActivityItem[];
+  modLog: UserModLogEntry[];
+};
+
+export type UserActivityItem = {
+  id: string;
+  type: QueueKind;
+  title: string;
+  body: string;
+  subreddit: string;
+  permalink: string;
+  createdAt: number;
+};
+
+export type UserModLogEntry = {
+  id: string;
+  action: string;
+  moderator: string;
+  targetId: string;
+  details: string;
+  createdAt: number;
 };
 
 export type Toast = {
