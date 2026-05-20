@@ -590,7 +590,7 @@ button:active {
 .comment-queue-stack {
   display: grid;
   gap: 0;
-  padding: 10px 16px 12px;
+  padding: 10px 16px 12px 24px;
 }
 
 .comment-queue-stack-threaded {
@@ -609,7 +609,7 @@ button:active {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: -7px;
+  left: -16px;
   width: 20px;
   pointer-events: none;
 }
@@ -1587,7 +1587,7 @@ kbd {
   }
 
   .comment-queue-stack {
-    padding: 12px;
+    padding: 12px 12px 12px 20px;
   }
 
   .feed-post-header {
