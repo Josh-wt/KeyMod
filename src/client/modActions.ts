@@ -9,6 +9,9 @@ export type ModMenuAction =
   | 'nsfw'
   | 'spoiler'
   | 'crowdControl'
+  | 'distinguish'
+  | 'ignoreReports'
+  | 'mute'
   | 'ban'
   | 'note'
   | 'user';
@@ -20,6 +23,8 @@ export type ModActionUpdate = {
   spoiler?: boolean;
   stickied?: boolean;
   crowdControlLevel?: CrowdControlLevel;
+  distinguished?: boolean;
+  ignoringReports?: boolean;
 };
 
 export type ModActionResult = {

@@ -7,8 +7,11 @@ import {
   Check,
   Construction,
   ExternalLink,
+  EyeOff,
   FileText,
   Lock,
+  MicOff,
+  ShieldCheck,
   MoreHorizontal,
   Pin,
   Shield,
@@ -56,6 +59,12 @@ function entryIcon(entry: ModMenuEntry) {
       return <AlertTriangle size={16} />;
     case 'crowdControl':
       return <Construction size={16} />;
+    case 'distinguish':
+      return <ShieldCheck size={16} />;
+    case 'ignoreReports':
+      return <EyeOff size={16} />;
+    case 'mute':
+      return <MicOff size={16} />;
     case 'user':
       return <User size={16} />;
     case 'note':

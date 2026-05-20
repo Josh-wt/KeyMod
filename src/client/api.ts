@@ -56,6 +56,15 @@ export const api = {
   highlight: (ids: string[]) => request<ModActionResult>('/api/highlight', { method: 'POST', body: JSON.stringify({ ids }) }),
   crowdControl: (ids: string[], level: CrowdControlLevel = 'MEDIUM') =>
     request<ModActionResult>('/api/crowd-control', { method: 'POST', body: JSON.stringify({ ids, level }) }),
+  distinguish: (ids: string[]) =>
+    request<ModActionResult>('/api/distinguish', { method: 'POST', body: JSON.stringify({ ids }) }),
+  ignoreReports: (ids: string[]) =>
+    request<ModActionResult>('/api/ignore-reports', { method: 'POST', body: JSON.stringify({ ids }) }),
+  mute: (username: string, note = '', unmute = false) =>
+    request<{ ok: true; muted: boolean }>('/api/mute', {
+      method: 'POST',
+      body: JSON.stringify({ username, note, unmute }),
+    }),
   ban: (username: string, duration: number | 'permanent', reason: string, message = '', note = '', context?: string) =>
     request<{ ok: true }>('/api/ban', { method: 'POST', body: JSON.stringify({ username, duration, reason, message, note, context }) }),
   flairs: () => request<{ flairs: Array<{ id: string; text?: string; name?: string }> }>('/api/flairs'),

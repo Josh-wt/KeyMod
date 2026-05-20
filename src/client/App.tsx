@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { api } from './api';
 import { useKeymap } from './useKeymap';
@@ -13,8 +13,11 @@ import { QueueItem as QueueItemRow } from './components/QueueItem';
 import { SelectionBar } from './components/SelectionBar';
 import { UndoToast } from './components/UndoToast';
 import { UserPanel } from './components/UserPanel';
-import type { KeyAction, QueueItem, Toast, UserInfo } from '../shared';
+import type { AppSettings, KeyAction, QueueItem, Toast, UserInfo } from '../shared';
+import { DEFAULT_KEYMAP } from '../settings';
 import { createModHandlers } from './createModHandlers';
+import { runKeyAction } from './keyActions';
+import { QueueToolbar } from './components/QueueToolbar';
 
 type Modal = 'ban' | 'flair' | 'note' | null;
 
@@ -84,6 +87,13 @@ export default function App() {
     }
   }, [addToast, queue]);
 
+  const settingsRef = useRef<AppSettings>({
+    keymap: DEFAULT_KEYMAP,
+    removalReasons: [],
+    banReasons: [],
+    conflicts: [],
+  });
+
   const openModalForItem = useCallback(
     (item: QueueItem, nextModal: Modal) => {
       focusItem(item);
@@ -96,51 +106,26 @@ export default function App() {
 
   const dispatch = useCallback(
     async (action: KeyAction) => {
-      const focused = queue.focused;
-      if (action === 'next') queue.moveFocus(1);
-      if (action === 'prev') queue.moveFocus(-1);
-      if (action === 'select') queue.toggleFocused();
-      if (action === 'help') setShowHelp((value) => !value);
-      if (action === 'undo') await undo();
-      if (action === 'user' && focused) setUserPanel(focused.author);
-      if (action === 'ban' && focused) openModalForItem(focused, 'ban');
-      if (action === 'flair' && focused) openModalForItem(focused, 'flair');
-      if (action === 'note' && focused) openModalForItem(focused, 'note');
-      if (action === 'approve') {
-        const ids = queue.targetIds;
-        if (!ids.length) return;
-        try {
-          const response = await api.approve(ids);
-          if (response.failed) {
-            addToast(`Approved ${response.ok}/${ids.length}. ${response.failed} failed.`, 'warning');
-          } else {
-            queue.markApproved(ids);
-            addToast(`Approved ${response.ok}.`, 'success');
-          }
-        } catch (error) {
-          addToast(error instanceof Error ? error.message : 'Approve failed', 'error');
-        }
-      }
-      if (action === 'lock') {
-        const ids = queue.targetIds;
-        if (!ids.length) return;
-        try {
-          const response = await api.lock(ids);
-          if (response.failed) {
-            addToast(response.errors?.[0] ?? 'Lock action failed.', 'error');
-            return;
-          }
-          for (const update of response.updates ?? []) {
-            const { id, ...patch } = update;
-            queue.patchItem(id, patch);
-          }
-          addToast(`Updated lock on ${response.ok} item(s).`, 'success');
-        } catch (error) {
-          addToast(error instanceof Error ? error.message : 'Lock failed', 'error');
-        }
-      }
+      await runKeyAction(action, {
+        targetIds: queue.targetIds,
+        focused: queue.focused,
+        removalReasons: settingsRef.current.removalReasons,
+        patchItem: queue.patchItem,
+        markApproved: queue.markApproved,
+        removeIds,
+        moveFocus: queue.moveFocus,
+        toggleFocused: queue.toggleFocused,
+        selectAllVisible: queue.selectAllVisible,
+        clearSelection: queue.clearSelection,
+        refresh: queue.refresh,
+        setShowHelp,
+        undo,
+        setUserPanel,
+        openModalForItem,
+        addToast,
+      });
     },
-    [addToast, openModalForItem, queue, undo],
+    [addToast, openModalForItem, queue, removeIds, undo],
   );
 
   const settings = useKeymap(
@@ -149,7 +134,7 @@ export default function App() {
     async (reasonIndex) => {
       const focused = queue.focused;
       if (!focused) return;
-      const banReason = settings.banReasons.find((item) => item.index === reasonIndex);
+      const banReason = settingsRef.current.banReasons.find((item) => item.index === reasonIndex);
       if (!banReason?.reason.trim()) {
         addToast(`Ban reason ${reasonIndex} is not configured.`, 'warning');
         return;
@@ -170,7 +155,12 @@ export default function App() {
     },
     modal !== null,
     addToast,
+    queue.clearSelection,
   );
+
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
 
   const subreddit = useMemo(() => queue.state.items[0]?.subreddit ?? 'subreddit', [queue.state.items]);
   const focused = queue.focused;
@@ -247,7 +237,50 @@ export default function App() {
   }, [focused?.author]);
 
   const commands = useMemo<Command[]>(() => {
+    const run = (action: KeyAction) => () => {
+      void dispatch(action);
+    };
     return [
+      {
+        id: 'approve',
+        title: 'Approve selection',
+        subtitle: 'Clear items from the mod queue',
+        section: 'Queue Tools',
+        keywords: ['approve', 'accept', 'ok'],
+        run: run('approve'),
+      },
+      {
+        id: 'spam',
+        title: 'Mark as spam',
+        subtitle: 'Remove and flag as spam',
+        section: 'Queue Tools',
+        keywords: ['spam', 'remove'],
+        run: run('spam'),
+      },
+      {
+        id: 'lock',
+        title: 'Toggle lock',
+        subtitle: 'Lock or unlock comments',
+        section: 'Queue Tools',
+        keywords: ['lock', 'comments'],
+        run: run('lock'),
+      },
+      {
+        id: 'ignore',
+        title: 'Ignore reports',
+        subtitle: 'Toggle report ignore on selection',
+        section: 'Queue Tools',
+        keywords: ['ignore', 'reports'],
+        run: run('ignoreReports'),
+      },
+      {
+        id: 'refresh',
+        title: 'Refresh queue',
+        subtitle: 'Reload mod queue from Reddit',
+        section: 'Queue Tools',
+        keywords: ['refresh', 'reload'],
+        run: run('refresh'),
+      },
       {
         id: 'notes-open',
         title: 'Open user notes',
@@ -297,7 +330,7 @@ export default function App() {
         run: () => setFeaturePanel('automod'),
       },
     ];
-  }, []);
+  }, [dispatch]);
 
   return (
     <main className="app-shell feed-shell" onMouseUp={queue.endDrag}>
@@ -322,8 +355,16 @@ export default function App() {
         </div>
       ))}
 
+      <QueueToolbar
+        filter={queue.state.filter}
+        stats={queue.stats}
+        isLoading={queue.state.isLoading}
+        onFilterChange={queue.setFilter}
+        onRefresh={queue.refresh}
+      />
+
       <section className="queue-list">
-        {queue.state.items.map((item, index) => (
+        {queue.visibleItems.map((item, index) => (
           <QueueItemRow
             key={item.id}
             item={item}
@@ -341,7 +382,9 @@ export default function App() {
           />
         ))}
         {queue.state.isLoading ? <div className="empty-state">Loading queue</div> : null}
-        {!queue.state.isLoading && !queue.state.items.length ? <div className="empty-state">Queue is empty</div> : null}
+        {!queue.state.isLoading && !queue.visibleItems.length ? (
+          <div className="empty-state">{queue.state.items.length ? 'No items match this filter' : 'Queue is empty'}</div>
+        ) : null}
       </section>
 
       {selectedCount > 0 ? <SelectionBar selectedCount={selectedCount} focusedCount={focused ? 1 : 0} /> : null}

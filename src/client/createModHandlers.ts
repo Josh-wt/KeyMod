@@ -1,4 +1,5 @@
 import { api } from './api';
+import { runDistinguish, runIgnoreReports } from './modDispatch';
 import { redditPermalinkUrl } from './permalink';
 import type { ModItemHandlers, ModMenuAction } from './modActions';
 import type { QueueItem, RemovalReason } from '../shared';
@@ -153,6 +154,38 @@ export function createModHandlers({
           applyUpdates(response.updates ?? [], patchItem);
           const stickied = response.updates?.[0]?.stickied;
           addToast(stickied ? 'Added to highlights.' : 'Removed from highlights.', 'success');
+          return;
+        }
+
+        if (action === 'distinguish') {
+          const response = await runDistinguish([item.id], patchItem);
+          if (response.failed) {
+            addToast(response.errors?.[0] ?? 'Distinguish failed.', 'error');
+            return;
+          }
+          const distinguished = response.updates?.[0]?.distinguished;
+          addToast(distinguished ? 'Distinguished.' : 'Undistinguished.', 'success');
+          return;
+        }
+
+        if (action === 'ignoreReports') {
+          const response = await runIgnoreReports([item.id], patchItem);
+          if (response.failed) {
+            addToast(response.errors?.[0] ?? 'Ignore reports failed.', 'error');
+            return;
+          }
+          const ignoring = response.updates?.[0]?.ignoringReports;
+          addToast(ignoring ? 'Reports ignored.' : 'Reports unignored.', 'success');
+          return;
+        }
+
+        if (action === 'mute') {
+          try {
+            await api.mute(item.author, `Muted from KeyModerator (${item.id})`);
+            addToast(`Muted u/${item.author}.`, 'success');
+          } catch (error) {
+            addToast(error instanceof Error ? error.message : 'Mute failed', 'error');
+          }
           return;
         }
 

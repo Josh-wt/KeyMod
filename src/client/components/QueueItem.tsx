@@ -1,8 +1,9 @@
-import { type MouseEvent } from 'react';
+import { memo, type MouseEvent } from 'react';
 import { Check } from 'lucide-react';
 import type { QueueItem as QueueItemType } from '../../shared';
 import type { ModItemHandlers } from '../modActions';
 import { FeedComment } from './FeedComment';
+import { QueueMeta } from './QueueMeta';
 import { FeedPostCard, feedPostFromItem, feedPostFromParent } from './FeedPostCard';
 
 type Props = {
@@ -24,7 +25,7 @@ function stop(event: MouseEvent) {
   event.stopPropagation();
 }
 
-export function QueueItem({
+export const QueueItem = memo(function QueueItem({
   item,
   index,
   focused,
@@ -64,6 +65,8 @@ export function QueueItem({
         {selected || dragPreviewed ? <Check size={14} /> : null}
       </button>
 
+      <QueueMeta item={item} />
+
       {isComment ? (
         <div className="comment-queue-stack">
           {parentPost ? (
@@ -92,4 +95,4 @@ export function QueueItem({
       )}
     </article>
   );
-}
+});

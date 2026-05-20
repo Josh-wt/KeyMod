@@ -94,6 +94,8 @@ type ModPatch = {
   spoiler?: boolean;
   stickied?: boolean;
   crowdControlLevel?: (typeof crowdLevels)[number];
+  distinguished?: boolean;
+  ignoringReports?: boolean;
 };
 
 let queueItems: DemoItem[] = [...demoItemsSeed];
@@ -225,6 +227,15 @@ function localApiPlugin(): Plugin {
             recentActivity: [...recentPosts, ...recentComments],
             recentPosts,
             recentComments,
+            modNotes: [
+              {
+                id: 'note_1',
+                note: 'Prior spam warnings in this subreddit.',
+                moderator: 'mod_alpha',
+                createdAt: Date.now() - 2 * 86_400_000,
+                label: 'SPAM_WARNING',
+              },
+            ],
             modLog: [
               {
                 id: 'modlog_1',
@@ -322,7 +333,21 @@ function localApiPlugin(): Plugin {
           json(res, { ok: updates.length, failed: 0, updates });
         };
 
-        if (url.startsWith('/remove') || url.startsWith('/approve') || url.startsWith('/lock') || url.startsWith('/nsfw') || url.startsWith('/spoiler') || url.startsWith('/highlight') || url.startsWith('/crowd-control') || url.startsWith('/ban') || url.startsWith('/flair') || url.startsWith('/note')) {
+        if (
+          url.startsWith('/remove') ||
+          url.startsWith('/approve') ||
+          url.startsWith('/lock') ||
+          url.startsWith('/nsfw') ||
+          url.startsWith('/spoiler') ||
+          url.startsWith('/highlight') ||
+          url.startsWith('/crowd-control') ||
+          url.startsWith('/distinguish') ||
+          url.startsWith('/ignore-reports') ||
+          url.startsWith('/mute') ||
+          url.startsWith('/ban') ||
+          url.startsWith('/flair') ||
+          url.startsWith('/note')
+        ) {
           void readJsonBody(req)
             .then((body) => {
               const payload = (body ?? {}) as { ids?: string[]; level?: (typeof crowdLevels)[number] };
@@ -377,6 +402,31 @@ function localApiPlugin(): Plugin {
                     return { id, stickied };
                   }),
                 );
+                return;
+              }
+
+              if (url.startsWith('/distinguish')) {
+                writeMod(
+                  ids.map((id) => {
+                    const distinguished = !modPatches[id]?.distinguished;
+                    return { id, distinguished };
+                  }),
+                );
+                return;
+              }
+
+              if (url.startsWith('/ignore-reports')) {
+                writeMod(
+                  ids.map((id) => {
+                    const ignoringReports = !modPatches[id]?.ignoringReports;
+                    return { id, ignoringReports };
+                  }),
+                );
+                return;
+              }
+
+              if (url.startsWith('/mute')) {
+                json(res, { ok: true, muted: true });
                 return;
               }
 

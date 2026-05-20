@@ -12,6 +12,16 @@ export const DEFAULT_KEYMAP: Keymap = {
   select: ' ',
   undo: 'Backspace',
   help: '?',
+  spam: 'x',
+  view: 'o',
+  nsfw: 'n',
+  spoiler: 'e',
+  sticky: 't',
+  distinguish: 'd',
+  ignoreReports: 'i',
+  refresh: 'r',
+  selectAll: 'a',
+  mute: 'Shift+m',
 };
 
 export const KEY_SETTING_BY_ACTION: Record<KeyAction, string> = {
@@ -26,11 +36,22 @@ export const KEY_SETTING_BY_ACTION: Record<KeyAction, string> = {
   select: 'key_select',
   undo: 'key_undo',
   help: 'key_help',
+  spam: 'key_spam',
+  view: 'key_view',
+  nsfw: 'key_nsfw',
+  spoiler: 'key_spoiler',
+  sticky: 'key_sticky',
+  distinguish: 'key_distinguish',
+  ignoreReports: 'key_ignore_reports',
+  refresh: 'key_refresh',
+  selectAll: 'key_select_all',
+  mute: 'key_mute',
 };
 
 export function normalizeKey(value: unknown, fallback: string): string {
   if (typeof value !== 'string' || value.length === 0) return fallback;
   if (value === 'Space' || value === 'space') return ' ';
+  if (value.startsWith('Shift+')) return value;
   if (value.length === 1 || value === 'Backspace' || value === 'Escape' || value === 'Enter') return value;
   return fallback;
 }

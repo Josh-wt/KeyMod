@@ -41,6 +41,17 @@ export const modMenuEntries: ModMenuEntry[] = [
     postOnly: true,
     label: (item) => `Adjust crowd control (${item.crowdControlLevel ?? 'OFF'})`,
   },
+  {
+    id: 'distinguish',
+    icon: 'default',
+    label: (item) => (item.distinguished ? 'Undistinguish' : 'Distinguish as mod'),
+  },
+  {
+    id: 'ignoreReports',
+    icon: 'default',
+    label: (item) => (item.ignoringReports ? 'Unignore reports' : 'Ignore reports'),
+  },
+  { id: 'mute', icon: 'default', label: (item) => `Mute u/${item.author}` },
   { id: 'user', icon: 'user', label: (item) => `View u/${item.author}` },
   { id: 'note', icon: 'note', label: () => 'Add mod note' },
   { id: 'ban', icon: 'ban', label: (item) => `Ban u/${item.author}` },

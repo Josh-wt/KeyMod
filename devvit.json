@@ -99,7 +99,17 @@
       "key_prev": { "type": "string", "label": "Key binding: prev", "defaultValue": "k" },
       "key_select": { "type": "string", "label": "Key binding: select", "defaultValue": " " },
       "key_undo": { "type": "string", "label": "Key binding: undo", "defaultValue": "Backspace" },
-      "key_help": { "type": "string", "label": "Key binding: help", "defaultValue": "?" }
+      "key_help": { "type": "string", "label": "Key binding: help", "defaultValue": "?" },
+      "key_spam": { "type": "string", "label": "Key binding: mark spam", "defaultValue": "x" },
+      "key_view": { "type": "string", "label": "Key binding: view on Reddit", "defaultValue": "o" },
+      "key_nsfw": { "type": "string", "label": "Key binding: toggle NSFW", "defaultValue": "n" },
+      "key_spoiler": { "type": "string", "label": "Key binding: toggle spoiler", "defaultValue": "e" },
+      "key_sticky": { "type": "string", "label": "Key binding: toggle highlight/sticky", "defaultValue": "t" },
+      "key_distinguish": { "type": "string", "label": "Key binding: distinguish", "defaultValue": "d" },
+      "key_ignore_reports": { "type": "string", "label": "Key binding: ignore reports", "defaultValue": "i" },
+      "key_refresh": { "type": "string", "label": "Key binding: refresh queue", "defaultValue": "r" },
+      "key_select_all": { "type": "string", "label": "Key binding: select all", "defaultValue": "a" },
+      "key_mute": { "type": "string", "label": "Key binding: mute author", "defaultValue": "Shift+m" }
     }
   },
   "scheduler": {

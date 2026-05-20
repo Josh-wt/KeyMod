@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from './api';
+import { actionForKey } from './keyBinding';
 import { DEFAULT_KEYMAP, detectKeyConflicts } from '../settings';
-import type { AppSettings, KeyAction, Keymap } from '../shared';
+import type { AppSettings, KeyAction } from '../shared';
 
 export function useKeymap(
-  dispatch: (action: KeyAction) => void,
+  dispatch: (action: KeyAction) => void | Promise<void>,
   handleRemove: (index: number) => void,
   handleBanReason: (index: number) => void,
   isModalOpen: boolean,
   addToast: (message: string, kind?: 'info' | 'warning' | 'error' | 'success', persistent?: boolean) => void,
+  onClearSelection?: () => void,
 ) {
   const [settings, setSettings] = useState<AppSettings>({
     keymap: DEFAULT_KEYMAP,
@@ -33,13 +35,6 @@ export function useKeymap(
       });
   }, [addToast]);
 
-  const keyToAction = useMemo(() => {
-    return Object.entries(settings.keymap).reduce<Record<string, KeyAction>>((acc, [action, key]) => {
-      acc[key] = action as KeyAction;
-      return acc;
-    }, {});
-  }, [settings.keymap]);
-
   useEffect(() => {
     let banChordActive = false;
     let banChordTimer: number | null = null;
@@ -56,6 +51,11 @@ export function useKeymap(
     function onKeyDown(e: KeyboardEvent) {
       const activeTag = document.activeElement?.tagName;
       if (isModalOpen || activeTag === 'INPUT' || activeTag === 'TEXTAREA') return;
+
+      if (e.key === 'Escape' && onClearSelection) {
+        onClearSelection();
+        return;
+      }
 
       if (e.ctrlKey && e.key.toLowerCase() === 'b') {
         e.preventDefault();
@@ -81,10 +81,10 @@ export function useKeymap(
         return;
       }
 
-      const action = keyToAction[e.key as keyof Keymap];
+      const action = actionForKey(settings.keymap, e) as KeyAction | undefined;
       if (action) {
         e.preventDefault();
-        dispatch(action);
+        void dispatch(action);
       }
     }
 
@@ -93,7 +93,7 @@ export function useKeymap(
       window.removeEventListener('keydown', onKeyDown);
       if (banChordTimer !== null) window.clearTimeout(banChordTimer);
     };
-  }, [addToast, dispatch, handleBanReason, handleRemove, isModalOpen, keyToAction]);
+  }, [addToast, dispatch, handleBanReason, handleRemove, isModalOpen, onClearSelection, settings.keymap]);
 
   return settings;
 }

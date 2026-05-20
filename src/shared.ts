@@ -48,7 +48,11 @@ export type QueueItem = {
   spoiler?: boolean;
   stickied?: boolean;
   crowdControlLevel?: CrowdControlLevel;
+  distinguished?: boolean;
+  ignoringReports?: boolean;
 };
+
+export type QueueFilter = 'all' | 'posts' | 'comments' | 'reported';
 
 export type KeyAction =
   | 'approve'
@@ -61,7 +65,17 @@ export type KeyAction =
   | 'prev'
   | 'select'
   | 'undo'
-  | 'help';
+  | 'help'
+  | 'spam'
+  | 'view'
+  | 'nsfw'
+  | 'spoiler'
+  | 'sticky'
+  | 'distinguish'
+  | 'ignoreReports'
+  | 'refresh'
+  | 'selectAll'
+  | 'mute';
 
 export type Keymap = Record<KeyAction, string>;
 
@@ -86,6 +100,14 @@ export type AppSettings = {
   conflicts: Array<{ key: string; actions: string[] }>;
 };
 
+export type ModNoteEntry = {
+  id: string;
+  note: string;
+  moderator: string;
+  createdAt: number;
+  label?: string;
+};
+
 export type UserInfo = {
   username: string;
   accountAgeDays: number;
@@ -96,6 +118,7 @@ export type UserInfo = {
   recentPosts: UserActivityItem[];
   recentComments: UserActivityItem[];
   modLog: UserModLogEntry[];
+  modNotes: ModNoteEntry[];
 };
 
 export type UserActivityItem = {

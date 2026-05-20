@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
-import type { UserActivityItem, UserInfo, UserModLogEntry } from '../../shared';
+import type { ModNoteEntry, UserActivityItem, UserInfo, UserModLogEntry } from '../../shared';
 
 type Props = {
   username: string;
@@ -9,7 +9,7 @@ type Props = {
 
 export function UserPanel({ username, onClose }: Props) {
   const [info, setInfo] = useState<UserInfo | null>(null);
-  const [tab, setTab] = useState<'posts' | 'comments' | 'modlog'>('posts');
+  const [tab, setTab] = useState<'posts' | 'comments' | 'modlog' | 'notes'>('posts');
 
   useEffect(() => {
     api.user(username).then(setInfo).catch(() => undefined);
@@ -51,10 +51,14 @@ export function UserPanel({ username, onClose }: Props) {
             <button className={tab === 'modlog' ? 'active' : ''} onClick={() => setTab('modlog')}>
               Mod log
             </button>
+            <button className={tab === 'notes' ? 'active' : ''} onClick={() => setTab('notes')}>
+              Notes
+            </button>
           </div>
           {tab === 'posts' ? <ActivityList items={info.recentPosts} empty="No recent posts found." /> : null}
           {tab === 'comments' ? <ActivityList items={info.recentComments} empty="No recent comments found." /> : null}
           {tab === 'modlog' ? <ModLogList items={info.modLog} /> : null}
+          {tab === 'notes' ? <ModNotesList notes={info.modNotes ?? []} /> : null}
         </>
       ) : (
         <p>Loading</p>
@@ -82,6 +86,23 @@ function ActivityList({ items, empty }: { items: UserActivityItem[]; empty: stri
           <strong>{item.title}</strong>
           {item.body ? <small>{item.body}</small> : null}
         </a>
+      ))}
+    </div>
+  );
+}
+
+function ModNotesList({ notes }: { notes: ModNoteEntry[] }) {
+  if (!notes.length) return <p className="panel-empty">No mod notes for this user.</p>;
+  return (
+    <div className="activity-list mod-notes-list">
+      {notes.map((entry) => (
+        <div key={entry.id}>
+          <span>
+            {entry.moderator} · {age(entry.createdAt)}
+            {entry.label ? ` · ${entry.label}` : ''}
+          </span>
+          <p>{entry.note}</p>
+        </div>
       ))}
     </div>
   );

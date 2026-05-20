@@ -206,6 +206,8 @@ function normalizeThing(rawValue: unknown, fallbackSubreddit = ''): QueueItem {
     spoiler: Boolean(raw.spoiler ?? raw.isSpoiler),
     stickied: Boolean(raw.stickied ?? raw.isStickied),
     crowdControlLevel: stringValue(raw.crowdControlLevel ?? raw.crowd_control_level) as CrowdControlLevel | undefined,
+    distinguished: Boolean(raw.distinguishedBy ?? raw.distinguished),
+    ignoringReports: Boolean(raw.ignoringReports ?? raw.ignore_reports),
   };
 }
 
@@ -290,6 +292,8 @@ type ModActionUpdate = {
   spoiler?: boolean;
   stickied?: boolean;
   crowdControlLevel?: CrowdControlLevel;
+  distinguished?: boolean;
+  ignoringReports?: boolean;
 };
 
 type ModActionResponse = {
@@ -716,6 +720,49 @@ app.post('/api/highlight', async (c) => {
   );
 });
 
+async function toggleDistinguish(id: string): Promise<Partial<ModActionUpdate>> {
+  const thing = await getThing(id);
+  const distinguished = Boolean((thing as { distinguishedBy?: string }).distinguishedBy);
+  if (distinguished) {
+    await thing.undistinguish();
+    return { distinguished: false };
+  }
+  await thing.distinguish();
+  return { distinguished: true };
+}
+
+async function toggleIgnoreReports(id: string): Promise<Partial<ModActionUpdate>> {
+  const thing = await getThing(id);
+  const ignoring = Boolean((thing as { ignoringReports?: boolean }).ignoringReports);
+  if (ignoring) {
+    await thing.unignoreReports();
+    return { ignoringReports: false };
+  }
+  await thing.ignoreReports();
+  return { ignoringReports: true };
+}
+
+app.post('/api/distinguish', async (c) => {
+  const { ids } = await c.req.json<{ ids: string[] }>();
+  return c.json(await runModActions(ids, toggleDistinguish));
+});
+
+app.post('/api/ignore-reports', async (c) => {
+  const { ids } = await c.req.json<{ ids: string[] }>();
+  return c.json(await runModActions(ids, toggleIgnoreReports));
+});
+
+app.post('/api/mute', async (c) => {
+  const { username, note = '', unmute = false } = await c.req.json<{ username: string; note?: string; unmute?: boolean }>();
+  const subreddit = await reddit.getSubredditByName(getSubredditName());
+  if (unmute) {
+    await subreddit.unmuteUser(username);
+    return c.json({ ok: true, muted: false });
+  }
+  await subreddit.muteUser(username, note);
+  return c.json({ ok: true, muted: true });
+});
+
 app.post('/api/crowd-control', async (c) => {
   const { ids, level = 'MEDIUM' } = await c.req.json<{ ids: string[]; level?: CrowdControlLevel }>();
   return c.json(
@@ -804,6 +851,23 @@ app.get('/api/user/:username', async (c) => {
   const priorRemovalsFromRedis = Number((await redis.get(`removals:${subredditId}:${username}`).catch(() => '0')) ?? 0);
   const priorRemovalsFromLog = modLog.filter((entry) => entry.action.includes('remove')).length;
 
+  let modNoteItems: unknown[] = [];
+  try {
+    modNoteItems = await listingItems(reddit.getModNotes({ subreddit: subredditName, user: username, limit: 25 }), 25);
+  } catch {
+    modNoteItems = [];
+  }
+  const modNotes = modNoteItems.map((entry) => {
+    const raw = ((entry as JsonRecord)?.data ?? entry) as JsonRecord;
+    return {
+      id: String(raw.id ?? crypto.randomUUID()),
+      note: String(raw.note ?? raw.body ?? ''),
+      moderator: String(raw.moderatorName ?? raw.moderator ?? 'unknown'),
+      createdAt: toTimestamp(raw.createdAt),
+      label: stringValue(raw.label) || undefined,
+    };
+  });
+
   const info: UserInfo = {
     username,
     accountAgeDays: Math.max(0, Math.floor((Date.now() - toTimestamp(user.createdAt)) / 86_400_000)),
@@ -814,6 +878,7 @@ app.get('/api/user/:username', async (c) => {
     recentPosts: recentPosts.length ? recentPosts : overview.filter((item) => item.type === 'post').slice(0, 10),
     recentComments: recentComments.length ? recentComments : overview.filter((item) => item.type === 'comment').slice(0, 10),
     modLog,
+    modNotes,
   };
 
   return c.json(info);
