@@ -2,11 +2,13 @@ import type {
   AppSettings,
   AutomodPanelData,
   AutomodValidation,
+  CrowdControlLevel,
   ModLogMatrix,
   NotificationCounts,
   QueueItem,
   UserInfo,
 } from '../shared';
+import type { ModActionResult } from './modActions';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
@@ -35,10 +37,10 @@ export const api = {
   settings: () => request<AppSettings>('/api/settings'),
   queue: (after?: string | null) =>
     request<{ items: QueueItem[]; after: string | null }>(`/api/queue${after ? `?after=${encodeURIComponent(after)}` : ''}`),
-  remove: (ids: string[], removalReasonIndex: number) =>
+  remove: (ids: string[], removalReasonIndex: number, asSpam = false) =>
     request<{ batchId: string; ok: number; failed: number }>('/api/remove', {
       method: 'POST',
-      body: JSON.stringify({ ids, removalReasonIndex }),
+      body: JSON.stringify({ ids, removalReasonIndex, asSpam }),
     }),
   undo: (batchId: string) =>
     request<{ restored: number; failed: number }>('/api/undo', {
@@ -46,16 +48,30 @@ export const api = {
       body: JSON.stringify({ batchId }),
     }),
   approve: (ids: string[]) =>
-    request<{ ok: number; failed: number }>('/api/approve', { method: 'POST', body: JSON.stringify({ ids }) }),
+    request<ModActionResult>('/api/approve', { method: 'POST', body: JSON.stringify({ ids }) }),
   lock: (ids: string[]) =>
-    request<{ ok: number; failed: number }>('/api/lock', { method: 'POST', body: JSON.stringify({ ids }) }),
-  ban: (authorId: string, duration: number | 'permanent', reason: string) =>
-    request<{ ok: true }>('/api/ban', { method: 'POST', body: JSON.stringify({ authorId, duration, reason }) }),
+    request<ModActionResult>('/api/lock', { method: 'POST', body: JSON.stringify({ ids }) }),
+  nsfw: (ids: string[]) => request<ModActionResult>('/api/nsfw', { method: 'POST', body: JSON.stringify({ ids }) }),
+  spoiler: (ids: string[]) => request<ModActionResult>('/api/spoiler', { method: 'POST', body: JSON.stringify({ ids }) }),
+  highlight: (ids: string[]) => request<ModActionResult>('/api/highlight', { method: 'POST', body: JSON.stringify({ ids }) }),
+  crowdControl: (ids: string[], level: CrowdControlLevel = 'MEDIUM') =>
+    request<ModActionResult>('/api/crowd-control', { method: 'POST', body: JSON.stringify({ ids, level }) }),
+  distinguish: (ids: string[]) =>
+    request<ModActionResult>('/api/distinguish', { method: 'POST', body: JSON.stringify({ ids }) }),
+  ignoreReports: (ids: string[]) =>
+    request<ModActionResult>('/api/ignore-reports', { method: 'POST', body: JSON.stringify({ ids }) }),
+  mute: (username: string, note = '', unmute = false) =>
+    request<{ ok: true; muted: boolean }>('/api/mute', {
+      method: 'POST',
+      body: JSON.stringify({ username, note, unmute }),
+    }),
+  ban: (username: string, duration: number | 'permanent', reason: string, message = '', note = '', context?: string) =>
+    request<{ ok: true }>('/api/ban', { method: 'POST', body: JSON.stringify({ username, duration, reason, message, note, context }) }),
   flairs: () => request<{ flairs: Array<{ id: string; text?: string; name?: string }> }>('/api/flairs'),
   flair: (postId: string, flairId: string) =>
     request<{ ok: true }>('/api/flair', { method: 'POST', body: JSON.stringify({ postId, flairId }) }),
-  note: (userId: string, note: string) =>
-    request<{ ok: true }>('/api/note', { method: 'POST', body: JSON.stringify({ userId, note }) }),
+  note: (username: string, note: string, redditId?: string) =>
+    request<{ ok: true }>('/api/note', { method: 'POST', body: JSON.stringify({ username, note, redditId }) }),
   user: (username: string) => request<UserInfo>(`/api/user/${encodeURIComponent(username)}`),
   notifications: () => request<NotificationCounts>('/api/notifications'),
   modLog: () => request<ModLogMatrix>('/api/mod-log'),

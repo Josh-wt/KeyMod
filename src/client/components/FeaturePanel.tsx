@@ -79,7 +79,20 @@ export function FeaturePanel({ kind, focused, removalReasons, userInfo, selected
         <section>
           <h3>u/{focused?.author ?? 'focused user'}</h3>
           <p>{userInfo ? `${userInfo.priorRemovals} prior removals · ${userInfo.combinedKarma} karma` : 'Load a focused user to view notes.'}</p>
-          <div className="note-card">No local note history in preview. Press <kbd>M</kbd> or run “Add mod note” to create one.</div>
+          <div className="mod-notes-inline">
+            {(userInfo?.modNotes ?? []).length ? (
+              userInfo?.modNotes.map((entry) => (
+                <div key={entry.id} className="note-card">
+                  <span>
+                    {entry.moderator} · {new Date(entry.createdAt).toLocaleDateString()}
+                  </span>
+                  <p>{entry.note}</p>
+                </div>
+              ))
+            ) : (
+              <div className="note-card">No mod notes yet. Press <kbd>M</kbd> to add one.</div>
+            )}
+          </div>
         </section>
       ) : null}
 

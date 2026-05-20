@@ -9,19 +9,22 @@ export function SelectionBar({ selectedCount, focusedCount }: Props) {
     <footer className="selection-bar">
       <strong>{count} selected</strong>
       <span>
-        <kbd>Ctrl+1-9</kbd> remove
+        <kbd>S</kbd> approve
       </span>
       <span>
-        <kbd>S</kbd> approve
+        <kbd>X</kbd> spam
+      </span>
+      <span>
+        <kbd>Ctrl+1-9</kbd> remove
       </span>
       <span>
         <kbd>L</kbd> lock
       </span>
       <span>
-        <kbd>B</kbd> ban
+        <kbd>I</kbd> ignore reports
       </span>
       <span>
-        <kbd>?</kbd> help
+        <kbd>Esc</kbd> clear
       </span>
     </footer>
   );

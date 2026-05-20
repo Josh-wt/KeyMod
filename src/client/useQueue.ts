@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from './api';
-import type { QueueItem } from '../shared';
+import { filterQueueItems, queueStats } from './queueFilter';
+import type { QueueFilter, QueueItem } from '../shared';
 
 export type QueueState = {
   items: QueueItem[];
+  filter: QueueFilter;
   focusedIndex: number;
   selectedIds: Set<string>;
   isDragging: boolean;
@@ -18,6 +20,7 @@ export type QueueState = {
 export function useQueue(addToast: (message: string, kind?: 'info' | 'warning' | 'error' | 'success') => void) {
   const [state, setState] = useState<QueueState>({
     items: [],
+    filter: 'all',
     focusedIndex: 0,
     selectedIds: new Set(),
     isDragging: false,
@@ -29,6 +32,9 @@ export function useQueue(addToast: (message: string, kind?: 'info' | 'warning' |
     isLoading: true,
   });
 
+  const visibleItems = useMemo(() => filterQueueItems(state.items, state.filter), [state.filter, state.items]);
+  const stats = useMemo(() => queueStats(state.items), [state.items]);
+
   const load = useCallback(
     async (after?: string | null) => {
       setState((current) => ({ ...current, isLoading: true }));
@@ -38,7 +44,7 @@ export function useQueue(addToast: (message: string, kind?: 'info' | 'warning' |
           ...current,
           items: after ? [...current.items, ...response.items] : response.items,
           after: response.after,
-          focusedIndex: current.items.length ? current.focusedIndex : 0,
+          focusedIndex: after ? current.focusedIndex : 0,
           isLoading: false,
         }));
       } catch (error) {
@@ -48,6 +54,10 @@ export function useQueue(addToast: (message: string, kind?: 'info' | 'warning' |
     },
     [addToast],
   );
+
+  const refresh = useCallback(() => {
+    void load(null);
+  }, [load]);
 
   useEffect(() => {
     void load();
@@ -59,18 +69,48 @@ export function useQueue(addToast: (message: string, kind?: 'info' | 'warning' |
     }
   }, [load, state.after, state.focusedIndex, state.isLoading, state.items.length]);
 
-  const focused = state.items[state.focusedIndex] ?? null;
+  useEffect(() => {
+    if (state.undoCountdown === null) return;
+    const timer = window.setInterval(() => {
+      setState((current) => {
+        if (current.undoCountdown === null) return current;
+        if (current.undoCountdown <= 1) return { ...current, undoCountdown: null, lastBatchId: null };
+        return { ...current, undoCountdown: current.undoCountdown - 1 };
+      });
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [state.undoCountdown]);
+
+  const focused = visibleItems[state.focusedIndex] ?? null;
 
   const targetIds = useMemo(() => {
-    if (state.selectedIds.size > 0) return [...state.selectedIds];
+    if (state.selectedIds.size > 0) {
+      return visibleItems.filter((item) => state.selectedIds.has(item.id)).map((item) => item.id);
+    }
     return focused ? [focused.id] : [];
-  }, [focused, state.selectedIds]);
+  }, [focused, state.selectedIds, visibleItems]);
+
+  const clampFocus = (index: number, length: number) => Math.max(0, Math.min(Math.max(0, length - 1), index));
 
   const moveFocus = useCallback((direction: 1 | -1) => {
-    setState((current) => ({
-      ...current,
-      focusedIndex: Math.max(0, Math.min(current.items.length - 1, current.focusedIndex + direction)),
-    }));
+    setState((current) => {
+      const items = filterQueueItems(current.items, current.filter);
+      return {
+        ...current,
+        focusedIndex: clampFocus(current.focusedIndex + direction, items.length),
+      };
+    });
+  }, []);
+
+  const focusIndex = useCallback((index: number) => {
+    setState((current) => {
+      const items = filterQueueItems(current.items, current.filter);
+      return { ...current, focusedIndex: clampFocus(index, items.length) };
+    });
+  }, []);
+
+  const setFilter = useCallback((filter: QueueFilter) => {
+    setState((current) => ({ ...current, filter, focusedIndex: 0 }));
   }, []);
 
   const toggleSelected = useCallback((id: string) => {
@@ -84,13 +124,25 @@ export function useQueue(addToast: (message: string, kind?: 'info' | 'warning' |
 
   const toggleFocused = useCallback(() => {
     setState((current) => {
-      const item = current.items[current.focusedIndex];
+      const item = filterQueueItems(current.items, current.filter)[current.focusedIndex];
       if (!item) return current;
       const selectedIds = new Set(current.selectedIds);
       if (selectedIds.has(item.id)) selectedIds.delete(item.id);
       else selectedIds.add(item.id);
       return { ...current, selectedIds };
     });
+  }, []);
+
+  const selectAllVisible = useCallback(() => {
+    setState((current) => {
+      const selectedIds = new Set(current.selectedIds);
+      filterQueueItems(current.items, current.filter).forEach((item) => selectedIds.add(item.id));
+      return { ...current, selectedIds };
+    });
+  }, []);
+
+  const clearSelection = useCallback(() => {
+    setState((current) => ({ ...current, selectedIds: new Set(), dragPreviewIds: new Set() }));
   }, []);
 
   const selectIds = useCallback((ids: string[]) => {
@@ -116,9 +168,10 @@ export function useQueue(addToast: (message: string, kind?: 'info' | 'warning' |
     setState((current) => {
       if (!current.isDragging || current.dragStartIndex === null) return current;
       if (index === current.dragStartIndex) return current;
+      const items = filterQueueItems(current.items, current.filter);
       const [start, end] = [current.dragStartIndex, index].sort((a, b) => a - b);
       const dragPreviewIds = new Set<string>();
-      current.items.slice(start, end + 1).forEach((item) => dragPreviewIds.add(item.id));
+      items.slice(start, end + 1).forEach((item) => dragPreviewIds.add(item.id));
       return { ...current, dragPreviewIds, focusedIndex: index };
     });
   }, []);
@@ -134,15 +187,47 @@ export function useQueue(addToast: (message: string, kind?: 'info' | 'warning' |
     });
   }, []);
 
+  const dismissIds = useCallback((ids: string[]) => {
+    setState((current) => {
+      const nextItems = current.items.filter((item) => !ids.includes(item.id));
+      const items = filterQueueItems(nextItems, current.filter);
+      return {
+        ...current,
+        items: nextItems,
+        selectedIds: new Set([...current.selectedIds].filter((id) => !ids.includes(id))),
+        dragPreviewIds: new Set([...current.dragPreviewIds].filter((id) => !ids.includes(id))),
+        focusedIndex: clampFocus(current.focusedIndex, items.length),
+      };
+    });
+  }, []);
+
   const markRemoved = useCallback((ids: string[], batchId: string) => {
+    setState((current) => {
+      const nextItems = current.items.filter((item) => !ids.includes(item.id));
+      const items = filterQueueItems(nextItems, current.filter);
+      return {
+        ...current,
+        items: nextItems,
+        selectedIds: new Set([...current.selectedIds].filter((id) => !ids.includes(id))),
+        dragPreviewIds: new Set([...current.dragPreviewIds].filter((id) => !ids.includes(id))),
+        lastBatchId: batchId,
+        undoCountdown: 10,
+        focusedIndex: clampFocus(current.focusedIndex, items.length),
+      };
+    });
+  }, []);
+
+  const markApproved = useCallback(
+    (ids: string[]) => {
+      dismissIds(ids);
+    },
+    [dismissIds],
+  );
+
+  const patchItem = useCallback((id: string, patch: Partial<QueueItem>) => {
     setState((current) => ({
       ...current,
-      items: current.items.filter((item) => !ids.includes(item.id)),
-      selectedIds: new Set([...current.selectedIds].filter((id) => !ids.includes(id))),
-      dragPreviewIds: new Set([...current.dragPreviewIds].filter((id) => !ids.includes(id))),
-      lastBatchId: batchId,
-      undoCountdown: 10,
-      focusedIndex: Math.min(current.focusedIndex, Math.max(0, current.items.length - ids.length - 1)),
+      items: current.items.map((item) => (item.id === id ? { ...item, ...patch } : item)),
     }));
   }, []);
 
@@ -150,24 +235,28 @@ export function useQueue(addToast: (message: string, kind?: 'info' | 'warning' |
     setState((current) => ({ ...current, lastBatchId: null, undoCountdown: null }));
   }, []);
 
-  const setCountdown = useCallback((undoCountdown: number | null) => {
-    setState((current) => ({ ...current, undoCountdown }));
-  }, []);
-
   return {
     state,
+    visibleItems,
+    stats,
     focused,
     targetIds,
     load,
+    refresh,
+    setFilter,
     moveFocus,
+    focusIndex,
     toggleSelected,
     toggleFocused,
+    selectAllVisible,
+    clearSelection,
     selectIds,
     startDrag,
     updateDrag,
     endDrag,
     markRemoved,
+    markApproved,
+    patchItem,
     clearUndo,
-    setCountdown,
   };
 }

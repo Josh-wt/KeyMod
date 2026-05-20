@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { api } from './api';
 import { useKeymap } from './useKeymap';
@@ -9,11 +9,15 @@ import { FeaturePanel, type FeaturePanelKind } from './components/FeaturePanel';
 import { FlairModal } from './components/FlairModal';
 import { HelpOverlay } from './components/HelpOverlay';
 import { NoteModal } from './components/NoteModal';
-import { QueueItem } from './components/QueueItem';
+import { QueueItem as QueueItemRow } from './components/QueueItem';
 import { SelectionBar } from './components/SelectionBar';
 import { UndoToast } from './components/UndoToast';
 import { UserPanel } from './components/UserPanel';
-import type { KeyAction, Toast, UserInfo } from '../shared';
+import type { AppSettings, KeyAction, QueueItem, Toast, UserInfo } from '../shared';
+import { DEFAULT_KEYMAP } from '../settings';
+import { createModHandlers } from './createModHandlers';
+import { runKeyAction } from './keyActions';
+import { QueueToolbar } from './components/QueueToolbar';
 
 type Modal = 'ban' | 'flair' | 'note' | null;
 
@@ -27,6 +31,8 @@ export default function App() {
   const [focusedUserInfo, setFocusedUserInfo] = useState<UserInfo | null>(null);
   const [lastRemovalCount, setLastRemovalCount] = useState(0);
   const [lastRemovalReason, setLastRemovalReason] = useState('');
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [modalItem, setModalItem] = useState<QueueItem | null>(null);
 
   const addToast = useCallback((message: string, kind: Toast['kind'] = 'info', persistent = false) => {
     const toast = { id: crypto.randomUUID(), kind, message, persistent };
@@ -37,15 +43,13 @@ export default function App() {
   const queue = useQueue(addToast);
   const selectedCount = queue.state.selectedIds.size;
 
-  const remove = useCallback(
-    async (reasonIndex: number) => {
-      const ids = queue.targetIds;
+  const removeIds = useCallback(
+    async (ids: string[], reasonIndex: number, asSpam = false) => {
       if (!ids.length) return;
-      const reason = reasonIndex.toString();
       setLastRemovalCount(ids.length);
-      setLastRemovalReason(`Rule ${reason}`);
+      setLastRemovalReason(asSpam ? 'Spam' : `Rule ${reasonIndex}`);
       try {
-        const response = await api.remove(ids, reasonIndex);
+        const response = await api.remove(ids, reasonIndex, asSpam);
         queue.markRemoved(ids, response.batchId);
         if (response.failed) addToast(`Removed ${response.ok}/${ids.length} items. ${response.failed} failed.`, 'warning');
         else addToast(`Removed ${ids.length} items.`, 'success');
@@ -54,6 +58,21 @@ export default function App() {
       }
     },
     [addToast, queue],
+  );
+
+  const remove = useCallback(
+    async (reasonIndex: number) => {
+      await removeIds(queue.targetIds, reasonIndex);
+    },
+    [queue.targetIds, removeIds],
+  );
+
+  const focusItem = useCallback(
+    (item: QueueItem) => {
+      const index = queue.state.items.findIndex((entry) => entry.id === item.id);
+      if (index >= 0) queue.focusIndex(index);
+    },
+    [queue],
   );
 
   const undo = useCallback(async () => {
@@ -68,39 +87,101 @@ export default function App() {
     }
   }, [addToast, queue]);
 
-  const dispatch = useCallback(
-    async (action: KeyAction) => {
-      const focused = queue.focused;
-      if (action === 'next') queue.moveFocus(1);
-      if (action === 'prev') queue.moveFocus(-1);
-      if (action === 'select') queue.toggleFocused();
-      if (action === 'help') setShowHelp((value) => !value);
-      if (action === 'undo') await undo();
-      if (action === 'user' && focused) setUserPanel(focused.author);
-      if (action === 'ban' && focused) setModal('ban');
-      if (action === 'flair' && focused) setModal('flair');
-      if (action === 'note' && focused) setModal('note');
-      if (action === 'approve') {
-        const ids = queue.targetIds;
-        if (!ids.length) return;
-        const response = await api.approve(ids);
-        addToast(response.failed ? `Approved ${response.ok}/${ids.length}. ${response.failed} failed.` : `Approved ${response.ok}.`, response.failed ? 'warning' : 'success');
-        await queue.load();
-      }
-      if (action === 'lock') {
-        const ids = queue.targetIds;
-        if (!ids.length) return;
-        const response = await api.lock(ids);
-        addToast(response.failed ? `Locked ${response.ok}/${ids.length}. ${response.failed} failed.` : `Locked ${response.ok}.`, response.failed ? 'warning' : 'success');
-      }
+  const settingsRef = useRef<AppSettings>({
+    keymap: DEFAULT_KEYMAP,
+    removalReasons: [],
+    banReasons: [],
+    conflicts: [],
+  });
+
+  const openModalForItem = useCallback(
+    (item: QueueItem, nextModal: Modal) => {
+      focusItem(item);
+      setModalItem(item);
+      setModal(nextModal);
+      setOpenMenuId(null);
     },
-    [addToast, queue, undo],
+    [focusItem],
   );
 
-  const settings = useKeymap(dispatch, remove, modal !== null, addToast);
+  const dispatch = useCallback(
+    async (action: KeyAction) => {
+      await runKeyAction(action, {
+        targetIds: queue.targetIds,
+        focused: queue.focused,
+        removalReasons: settingsRef.current.removalReasons,
+        patchItem: queue.patchItem,
+        markApproved: queue.markApproved,
+        removeIds,
+        moveFocus: queue.moveFocus,
+        toggleFocused: queue.toggleFocused,
+        selectAllVisible: queue.selectAllVisible,
+        clearSelection: queue.clearSelection,
+        refresh: queue.refresh,
+        setShowHelp,
+        undo,
+        setUserPanel,
+        openModalForItem,
+        addToast,
+      });
+    },
+    [addToast, openModalForItem, queue, removeIds, undo],
+  );
+
+  const settings = useKeymap(
+    dispatch,
+    remove,
+    async (reasonIndex) => {
+      const focused = queue.focused;
+      if (!focused) return;
+      const banReason = settingsRef.current.banReasons.find((item) => item.index === reasonIndex);
+      if (!banReason?.reason.trim()) {
+        addToast(`Ban reason ${reasonIndex} is not configured.`, 'warning');
+        return;
+      }
+      try {
+        await api.ban(
+          focused.author,
+          banReason.duration === 0 ? 'permanent' : banReason.duration,
+          banReason.reason,
+          banReason.message,
+          banReason.note,
+          focused.id,
+        );
+        addToast(`Banned u/${focused.author}: ${banReason.reason}`, 'success');
+      } catch (error) {
+        addToast(error instanceof Error ? error.message : 'Ban failed', 'error');
+      }
+    },
+    modal !== null,
+    addToast,
+    queue.clearSelection,
+  );
+
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
 
   const subreddit = useMemo(() => queue.state.items[0]?.subreddit ?? 'subreddit', [queue.state.items]);
   const focused = queue.focused;
+
+  const modHandlers = useMemo(
+    () =>
+      createModHandlers({
+        removalReasons: settings.removalReasons,
+        focusItem,
+        setOpenMenuId,
+        removeIds,
+        markApproved: queue.markApproved,
+        patchItem: queue.patchItem,
+        openModalForItem,
+        setUserPanel,
+        addToast,
+      }),
+    [addToast, focusItem, openModalForItem, queue.markApproved, queue.patchItem, removeIds, settings.removalReasons],
+  );
+
+  const actionItem = modalItem ?? focused;
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -146,13 +227,60 @@ export default function App() {
   }, [queue.endDrag]);
 
   useEffect(() => {
+    setOpenMenuId(null);
+  }, [queue.state.focusedIndex]);
+
+  useEffect(() => {
     setFocusedUserInfo(null);
     if (!focused?.author) return;
     api.user(focused.author).then(setFocusedUserInfo).catch(() => undefined);
   }, [focused?.author]);
 
   const commands = useMemo<Command[]>(() => {
+    const run = (action: KeyAction) => () => {
+      void dispatch(action);
+    };
     return [
+      {
+        id: 'approve',
+        title: 'Approve selection',
+        subtitle: 'Clear items from the mod queue',
+        section: 'Queue Tools',
+        keywords: ['approve', 'accept', 'ok'],
+        run: run('approve'),
+      },
+      {
+        id: 'spam',
+        title: 'Mark as spam',
+        subtitle: 'Remove and flag as spam',
+        section: 'Queue Tools',
+        keywords: ['spam', 'remove'],
+        run: run('spam'),
+      },
+      {
+        id: 'lock',
+        title: 'Toggle lock',
+        subtitle: 'Lock or unlock comments',
+        section: 'Queue Tools',
+        keywords: ['lock', 'comments'],
+        run: run('lock'),
+      },
+      {
+        id: 'ignore',
+        title: 'Ignore reports',
+        subtitle: 'Toggle report ignore on selection',
+        section: 'Queue Tools',
+        keywords: ['ignore', 'reports'],
+        run: run('ignoreReports'),
+      },
+      {
+        id: 'refresh',
+        title: 'Refresh queue',
+        subtitle: 'Reload mod queue from Reddit',
+        section: 'Queue Tools',
+        keywords: ['refresh', 'reload'],
+        run: run('refresh'),
+      },
       {
         id: 'notes-open',
         title: 'Open user notes',
@@ -202,16 +330,13 @@ export default function App() {
         run: () => setFeaturePanel('automod'),
       },
     ];
-  }, []);
+  }, [dispatch]);
 
   return (
-    <main className="app-shell" onMouseUp={queue.endDrag}>
-      <header className="topbar">
-        <div>
-          <h1>KeyQueue</h1>
-          <span>r/{subreddit}</span>
-        </div>
-        <nav>
+    <main className="app-shell feed-shell" onMouseUp={queue.endDrag}>
+      <header className="topbar topbar-minimal">
+        <span className="feed-context">r/{subreddit}</span>
+        <nav className="topbar-actions">
           <button onClick={() => setShowCommandPalette(true)} aria-label="Open global actions">
             Ctrl+K
           </button>
@@ -230,25 +355,39 @@ export default function App() {
         </div>
       ))}
 
+      <QueueToolbar
+        filter={queue.state.filter}
+        stats={queue.stats}
+        isLoading={queue.state.isLoading}
+        onFilterChange={queue.setFilter}
+        onRefresh={queue.refresh}
+      />
+
       <section className="queue-list">
-        {queue.state.items.map((item, index) => (
-          <QueueItem
+        {queue.visibleItems.map((item, index) => (
+          <QueueItemRow
             key={item.id}
             item={item}
             index={index}
             focused={index === queue.state.focusedIndex}
             selected={queue.state.selectedIds.has(item.id)}
             dragPreviewed={queue.state.dragPreviewIds.has(item.id)}
+            modHandlers={modHandlers}
+            menuOpen={openMenuId === item.id}
+            onMenuOpenChange={(open) => setOpenMenuId(open ? item.id : null)}
             onToggle={queue.toggleSelected}
+            onFocusIndex={queue.focusIndex}
             onDragStart={queue.startDrag}
             onDragUpdate={queue.updateDrag}
           />
         ))}
         {queue.state.isLoading ? <div className="empty-state">Loading queue</div> : null}
-        {!queue.state.isLoading && !queue.state.items.length ? <div className="empty-state">Queue is empty</div> : null}
+        {!queue.state.isLoading && !queue.visibleItems.length ? (
+          <div className="empty-state">{queue.state.items.length ? 'No items match this filter' : 'Queue is empty'}</div>
+        ) : null}
       </section>
 
-      <SelectionBar selectedCount={selectedCount} focusedCount={focused ? 1 : 0} />
+      {selectedCount > 0 ? <SelectionBar selectedCount={selectedCount} focusedCount={focused ? 1 : 0} /> : null}
 
       <div className="toast-stack">
         {toasts.map((toast) => (
@@ -268,36 +407,48 @@ export default function App() {
         />
       ) : null}
 
-      {modal === 'ban' && focused ? (
+      {modal === 'ban' && actionItem ? (
         <BanModal
-          username={focused.author}
-          onCancel={() => setModal(null)}
-          onSubmit={async (duration, reason) => {
-            await api.ban(focused.authorId, duration, reason);
+          username={actionItem.author}
+          onCancel={() => {
             setModal(null);
-            addToast(`Banned u/${focused.author}.`, 'success');
+            setModalItem(null);
+          }}
+          onSubmit={async (duration, reason) => {
+            await api.ban(actionItem.author, duration, reason, '', '', actionItem.id);
+            setModal(null);
+            setModalItem(null);
+            addToast(`Banned u/${actionItem.author}.`, 'success');
           }}
         />
       ) : null}
 
-      {modal === 'flair' && focused ? (
+      {modal === 'flair' && actionItem ? (
         <FlairModal
-          onCancel={() => setModal(null)}
-          onSelect={async (flairId) => {
-            await api.flair(focused.id, flairId);
+          onCancel={() => {
             setModal(null);
+            setModalItem(null);
+          }}
+          onSelect={async (flairId) => {
+            await api.flair(actionItem.id, flairId);
+            setModal(null);
+            setModalItem(null);
             addToast('Flair applied.', 'success');
           }}
         />
       ) : null}
 
-      {modal === 'note' && focused ? (
+      {modal === 'note' && actionItem ? (
         <NoteModal
-          username={focused.author}
-          onCancel={() => setModal(null)}
-          onSubmit={async (note) => {
-            await api.note(focused.authorId, note);
+          username={actionItem.author}
+          onCancel={() => {
             setModal(null);
+            setModalItem(null);
+          }}
+          onSubmit={async (note) => {
+            await api.note(actionItem.author, note, actionItem.id);
+            setModal(null);
+            setModalItem(null);
             addToast('Mod note saved.', 'success');
           }}
         />
