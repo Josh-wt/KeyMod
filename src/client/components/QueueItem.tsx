@@ -3,7 +3,6 @@ import { Check } from 'lucide-react';
 import type { QueueItem as QueueItemType } from '../../shared';
 import type { ModItemHandlers } from '../modActions';
 import { FeedComment } from './FeedComment';
-import { QueueMeta } from './QueueMeta';
 import { FeedPostCard, feedPostFromItem, feedPostFromParent } from './FeedPostCard';
 
 type Props = {
@@ -64,8 +63,6 @@ export const QueueItem = memo(function QueueItem({
       >
         {selected || dragPreviewed ? <Check size={14} /> : null}
       </button>
-
-      <QueueMeta item={item} />
 
       {isComment ? (
         <div className="comment-queue-stack">

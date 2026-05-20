@@ -4,6 +4,7 @@ import type { ParentPostContext, QueueItem } from '../../shared';
 import { compactNumber, feedAge, mediaUrl, subredditInitials } from '../feedUtils';
 import type { ModItemHandlers } from '../modActions';
 import { ModActions } from './ModActions';
+import { QueueMeta } from './QueueMeta';
 
 export type FeedPostSource = {
   subreddit: string;
@@ -105,6 +106,8 @@ export function FeedPostCard({
           {headerExtra}
         </div>
       </header>
+
+      {item && !embedded ? <QueueMeta item={item} /> : null}
 
       <h2 className="feed-post-title">{post.title}</h2>
 

@@ -55,6 +55,15 @@ function toTimestamp(value: unknown): number {
   return numeric > 10_000_000_000 ? numeric : numeric * 1000;
 }
 
+function reportReasonFromValue(report: unknown): string {
+  if (Array.isArray(report)) return reportReasonFromValue(report[0]);
+  if (report && typeof report === 'object') {
+    const record = report as JsonRecord;
+    return stringValue(record.reason ?? record.reportReason ?? record.category ?? record.title);
+  }
+  return typeof report === 'string' ? report.trim() : '';
+}
+
 function getReportReasons(raw: JsonRecord): string[] {
   const reports = [
     raw.modReports,
@@ -62,15 +71,15 @@ function getReportReasons(raw: JsonRecord): string[] {
     raw.userReports,
     raw.userReportReasons,
     raw.reportReasons,
+    raw.reports,
+    raw.report_list,
   ].flat(2);
 
-  return reports
-    .map((report) => {
-      if (Array.isArray(report)) return report[0];
-      if (report && typeof report === 'object' && 'reason' in report) return String(report.reason);
-      return typeof report === 'string' ? report : '';
-    })
-    .filter(Boolean);
+  const reasons = reports.map(reportReasonFromValue).filter(Boolean);
+  const summary = stringValue(raw.reportReason ?? raw.topReportReason);
+  if (summary) reasons.push(summary);
+
+  return [...new Set(reasons)];
 }
 
 function stringValue(value: unknown): string {
@@ -190,7 +199,9 @@ function normalizeThing(rawValue: unknown, fallbackSubreddit = ''): QueueItem {
     permalink: String(raw.permalink ?? raw.url ?? ''),
     createdAt: toTimestamp(raw.createdAt ?? raw.created_utc),
     reportReasons,
-    numReports: Number(raw.numReports ?? raw.num_reports ?? raw.numberOfReports ?? reportReasons.length),
+    numReports: Number(
+      raw.numReports ?? raw.num_reports ?? raw.numberOfReports ?? raw.report_count ?? raw.totalReports ?? reportReasons.length,
+    ),
     score: Number(raw.score ?? raw.ups ?? 0),
     numComments: Number(raw.numberOfComments ?? raw.numComments ?? raw.num_comments ?? 0),
     flairText: flairText(raw),
@@ -207,7 +218,7 @@ function normalizeThing(rawValue: unknown, fallbackSubreddit = ''): QueueItem {
     stickied: Boolean(raw.stickied ?? raw.isStickied),
     crowdControlLevel: stringValue(raw.crowdControlLevel ?? raw.crowd_control_level) as CrowdControlLevel | undefined,
     distinguished: Boolean(raw.distinguishedBy ?? raw.distinguished),
-    ignoringReports: Boolean(raw.ignoringReports ?? raw.ignore_reports),
+    ignoringReports: Boolean(raw.ignoringReports ?? raw.ignore_reports ?? raw.ignoreReports),
   };
 }
 
@@ -279,6 +290,19 @@ async function listingItems<T>(listing: { all?: () => Promise<T[]>; get?: (count
   if (typeof listing.get === 'function') return listing.get(limit);
   if (typeof listing.all === 'function') return listing.all();
   return [];
+}
+
+async function listingPage<T extends { id?: string; name?: string }>(
+  listing: { all?: () => Promise<T[]>; get?: (count: number) => Promise<T[]>; hasMore?: boolean },
+  limit: number,
+): Promise<{ items: T[]; after: string | null }> {
+  const items = await listingItems(listing, limit);
+  const last = items[items.length - 1];
+  const cursor = String(last?.id ?? last?.name ?? '');
+  return {
+    items,
+    after: listing.hasMore && cursor ? cursor : null,
+  };
 }
 
 async function getThing(id: string) {
@@ -608,12 +632,12 @@ app.get('/api/queue', async (c) => {
   const subredditName = getSubredditName();
   const after = c.req.query('after') || undefined;
   const listing = reddit.getModQueue({ subreddit: subredditName, type: 'all', limit: 20, after });
-  const rawItems = await listingItems(listing, 20);
-  const items = await enrichQueueItems(rawItems.map((item) => normalizeThing(item, subredditName)), subredditName);
+  const page = await listingPage(listing, 20);
+  const items = await enrichQueueItems(page.items.map((item) => normalizeThing(item, subredditName)), subredditName);
 
   return c.json({
     items,
-    after: listing.hasMore && items.length ? items[items.length - 1].id : null,
+    after: page.after,
   });
 });
 
@@ -808,12 +832,14 @@ app.post('/api/flair', async (c) => {
   if (body.postId.startsWith('t1_')) {
     return c.json({ error: 'Post flair cannot be applied to comments.' }, 400);
   }
+  const templates = await reddit.getPostFlairTemplates(getSubredditName());
+  const template = templates.find((entry) => entry.id === body.flairId);
   await reddit.setPostFlair({
     postId: body.postId as never,
     flairTemplateId: body.flairId,
     subredditName: getSubredditName(),
   });
-  return c.json({ ok: true });
+  return c.json({ ok: true, flairText: template?.text ?? '' });
 });
 
 app.post('/api/note', async (c) => {
