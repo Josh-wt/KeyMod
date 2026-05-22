@@ -227,6 +227,12 @@ export default function App() {
   }, [feed.state.items, isQueueView, queue.state.items]);
 
   useEffect(() => {
+    if (window.matchMedia('(max-width: 720px)').matches) {
+      setRulesPanelExpanded(false);
+    }
+  }, []);
+
+  useEffect(() => {
     setRulesLoading(true);
     api
       .subredditRules()
@@ -437,7 +443,7 @@ export default function App() {
 
   return (
     <main
-      className="app-shell feed-shell"
+      className={`app-shell feed-shell${activeRule ? ' removal-mode-active' : ''}`}
       onMouseUp={() => {
         if (isQueueView) queue.endDrag();
         else feed.endDrag();
