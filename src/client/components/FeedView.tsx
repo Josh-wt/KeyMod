@@ -17,8 +17,9 @@ type Props = {
   rulesLoading: boolean;
   rulesExpanded: boolean;
   onRulesExpandedChange: (expanded: boolean) => void;
+  selectedRuleId: string | null;
   activeRuleId: string | null;
-  onActiveRuleChange: (rule: SubredditRule | null) => void;
+  onRuleClick: (rule: SubredditRule) => void;
   onToggle: (id: string) => void;
 };
 
@@ -34,8 +35,9 @@ export function FeedView({
   rulesLoading,
   rulesExpanded,
   onRulesExpandedChange,
+  selectedRuleId,
   activeRuleId,
-  onActiveRuleChange,
+  onRuleClick,
   onToggle,
 }: Props) {
   const { state, visibleItems } = feed;
@@ -48,8 +50,9 @@ export function FeedView({
           isLoading={rulesLoading}
           expanded={rulesExpanded}
           onExpandedChange={onRulesExpandedChange}
+          selectedRuleId={selectedRuleId}
           activeRuleId={activeRuleId}
-          onActiveRuleChange={onActiveRuleChange}
+          onRuleClick={onRuleClick}
         />
         {state.activePost ? (
           <button type="button" className="filter-sidebar-refresh" onClick={feed.closePost}>

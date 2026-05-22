@@ -19,8 +19,9 @@ type Props = {
   rulesLoading: boolean;
   rulesExpanded: boolean;
   onRulesExpandedChange: (expanded: boolean) => void;
+  selectedRuleId: string | null;
   activeRuleId: string | null;
-  onActiveRuleChange: (rule: SubredditRule | null) => void;
+  onRuleClick: (rule: SubredditRule) => void;
 };
 
 const filters: Array<{ id: QueueFilter; label: string; count?: (stats: Stats) => number }> = [
@@ -40,8 +41,9 @@ export function QueueToolbar({
   rulesLoading,
   rulesExpanded,
   onRulesExpandedChange,
+  selectedRuleId,
   activeRuleId,
-  onActiveRuleChange,
+  onRuleClick,
 }: Props) {
   return (
     <aside className="filter-sidebar" aria-label="Queue controls">
@@ -50,8 +52,9 @@ export function QueueToolbar({
         isLoading={rulesLoading}
         expanded={rulesExpanded}
         onExpandedChange={onRulesExpandedChange}
+        selectedRuleId={selectedRuleId}
         activeRuleId={activeRuleId}
-        onActiveRuleChange={onActiveRuleChange}
+        onRuleClick={onRuleClick}
       />
       <button type="button" className="filter-sidebar-refresh" onClick={onRefresh} disabled={isLoading}>
         <RefreshCw size={16} className={isLoading ? 'spin' : ''} />

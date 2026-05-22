@@ -1642,6 +1642,18 @@ kbd {
   text-align: left;
 }
 
+.rules-sidebar-rule.selected {
+  border-color: var(--line);
+  color: #d7dadc;
+  background: var(--surface-1);
+}
+
+.rules-sidebar-rule-hint {
+  color: var(--text-subtle);
+  font-size: 10px;
+  font-weight: 500;
+}
+
 .rules-sidebar-rule:hover {
   color: #d7dadc;
   background: var(--surface-1);
@@ -1673,6 +1685,12 @@ kbd {
   color: #f0c4c4;
   background: rgb(200 72 72 / 10%);
   font-size: 12px;
+}
+
+.rule-mode-banner.pending {
+  border-top-color: var(--line);
+  color: var(--text-muted);
+  background: var(--surface-1);
 }
 
 .rule-mode-banner strong {
