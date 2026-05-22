@@ -1,5 +1,6 @@
 import { RefreshCw } from 'lucide-react';
-import type { QueueFilter } from '../../shared';
+import type { QueueFilter, SubredditRule } from '../../shared';
+import { RulesSidebar } from './RulesSidebar';
 
 type Stats = {
   total: number;
@@ -14,6 +15,12 @@ type Props = {
   isLoading: boolean;
   onFilterChange: (filter: QueueFilter) => void;
   onRefresh: () => void;
+  rules: SubredditRule[];
+  rulesLoading: boolean;
+  rulesExpanded: boolean;
+  onRulesExpandedChange: (expanded: boolean) => void;
+  activeRuleId: string | null;
+  onActiveRuleChange: (rule: SubredditRule | null) => void;
 };
 
 const filters: Array<{ id: QueueFilter; label: string; count?: (stats: Stats) => number }> = [
@@ -23,9 +30,29 @@ const filters: Array<{ id: QueueFilter; label: string; count?: (stats: Stats) =>
   { id: 'reported', label: 'Reported', count: (s) => s.reported },
 ];
 
-export function QueueToolbar({ filter, stats, isLoading, onFilterChange, onRefresh }: Props) {
+export function QueueToolbar({
+  filter,
+  stats,
+  isLoading,
+  onFilterChange,
+  onRefresh,
+  rules,
+  rulesLoading,
+  rulesExpanded,
+  onRulesExpandedChange,
+  activeRuleId,
+  onActiveRuleChange,
+}: Props) {
   return (
     <aside className="filter-sidebar" aria-label="Queue controls">
+      <RulesSidebar
+        rules={rules}
+        isLoading={rulesLoading}
+        expanded={rulesExpanded}
+        onExpandedChange={onRulesExpandedChange}
+        activeRuleId={activeRuleId}
+        onActiveRuleChange={onActiveRuleChange}
+      />
       <button type="button" className="filter-sidebar-refresh" onClick={onRefresh} disabled={isLoading}>
         <RefreshCw size={16} className={isLoading ? 'spin' : ''} />
         <span>Refresh</span>

@@ -1,8 +1,9 @@
 import { ArrowLeft, RefreshCw } from 'lucide-react';
-import type { FeedSort } from '../../shared';
+import type { FeedSort, SubredditRule } from '../../shared';
 import type { ModItemHandlers } from '../modActions';
 import type { useFeedList } from '../useFeedList';
 import { QueueItem as QueueItemRow } from './QueueItem';
+import { RulesSidebar } from './RulesSidebar';
 
 type FeedList = ReturnType<typeof useFeedList>;
 
@@ -12,16 +13,44 @@ type Props = {
   modHandlers: ModItemHandlers;
   openMenuId: string | null;
   onMenuOpenChange: (id: string | null) => void;
+  rules: SubredditRule[];
+  rulesLoading: boolean;
+  rulesExpanded: boolean;
+  onRulesExpandedChange: (expanded: boolean) => void;
+  activeRuleId: string | null;
+  onActiveRuleChange: (rule: SubredditRule | null) => void;
+  onToggle: (id: string) => void;
 };
 
 const SORTS: FeedSort[] = ['hot', 'new', 'top'];
 
-export function FeedView({ subreddit, feed, modHandlers, openMenuId, onMenuOpenChange }: Props) {
+export function FeedView({
+  subreddit,
+  feed,
+  modHandlers,
+  openMenuId,
+  onMenuOpenChange,
+  rules,
+  rulesLoading,
+  rulesExpanded,
+  onRulesExpandedChange,
+  activeRuleId,
+  onActiveRuleChange,
+  onToggle,
+}: Props) {
   const { state, visibleItems } = feed;
 
   return (
     <div className="queue-workspace">
       <aside className="filter-sidebar" aria-label="Feed controls">
+        <RulesSidebar
+          rules={rules}
+          isLoading={rulesLoading}
+          expanded={rulesExpanded}
+          onExpandedChange={onRulesExpandedChange}
+          activeRuleId={activeRuleId}
+          onActiveRuleChange={onActiveRuleChange}
+        />
         {state.activePost ? (
           <button type="button" className="filter-sidebar-refresh" onClick={feed.closePost}>
             <ArrowLeft size={16} />
@@ -65,7 +94,7 @@ export function FeedView({ subreddit, feed, modHandlers, openMenuId, onMenuOpenC
             modHandlers={modHandlers}
             menuOpen={openMenuId === item.id}
             onMenuOpenChange={(open) => onMenuOpenChange(open ? item.id : null)}
-            onToggle={feed.toggleSelected}
+            onToggle={onToggle}
             onFocusIndex={feed.focusIndex}
             onDragStart={feed.startDrag}
             onDragUpdate={feed.updateDrag}

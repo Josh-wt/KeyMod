@@ -434,6 +434,37 @@ function localApiPlugin(): Plugin {
         }
 
         const url = pathname.slice('/api'.length);
+        if (url.startsWith('/subreddit-rules')) {
+          json(res, {
+            rules: [
+              {
+                id: 'teenagers:0:Be respectful',
+                shortName: 'Be respectful',
+                description: 'Treat others with respect. No harassment or hate.',
+                kind: 'all',
+                violationReason: 'Be respectful',
+                priority: 0,
+              },
+              {
+                id: 'teenagers:1:No spam',
+                shortName: 'No spam',
+                description: 'No advertising, referral links, or repetitive posts.',
+                kind: 'link',
+                violationReason: 'Spam',
+                priority: 1,
+              },
+              {
+                id: 'teenagers:2:Stay on topic',
+                shortName: 'Stay on topic',
+                description: 'Posts should be relevant to the community.',
+                kind: 'all',
+                violationReason: 'Off topic',
+                priority: 2,
+              },
+            ],
+          });
+          return;
+        }
         if (url.startsWith('/settings')) {
           json(res, {
             keymap: {

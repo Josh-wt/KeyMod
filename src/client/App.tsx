@@ -15,9 +15,10 @@ import { QueueItem as QueueItemRow } from './components/QueueItem';
 import { SelectionBar } from './components/SelectionBar';
 import { UndoToast } from './components/UndoToast';
 import { UserPanel } from './components/UserPanel';
-import type { AppSettings, KeyAction, QueueItem, Toast, UserInfo } from '../shared';
+import type { AppSettings, KeyAction, QueueItem, SubredditRule, Toast, UserInfo } from '../shared';
 import { DEFAULT_KEYMAP } from '../settings';
 import { createModHandlers } from './createModHandlers';
+import { resolveRemovalReasonIndex } from './ruleMode';
 import { runKeyAction } from './keyActions';
 import { QueueToolbar } from './components/QueueToolbar';
 import { FeedView } from './components/FeedView';
@@ -44,6 +45,10 @@ export default function App() {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [modalItem, setModalItem] = useState<QueueItem | null>(null);
   const [removeAsSpam, setRemoveAsSpam] = useState(false);
+  const [subredditRules, setSubredditRules] = useState<SubredditRule[]>([]);
+  const [rulesLoading, setRulesLoading] = useState(true);
+  const [rulesExpanded, setRulesExpanded] = useState(true);
+  const [activeRule, setActiveRule] = useState<SubredditRule | null>(null);
 
   const addToast = useCallback((message: string, kind: Toast['kind'] = 'info', persistent = false) => {
     const toast = { id: crypto.randomUUID(), kind, message, persistent };
@@ -70,7 +75,7 @@ export default function App() {
       const pendingBatchId = crypto.randomUUID();
 
       setLastRemovalCount(ids.length);
-      setLastRemovalReason(asSpam ? 'Spam' : `Rule ${reasonIndex}`);
+      setLastRemovalReason(asSpam ? 'Spam' : (activeRule?.shortName ?? `Rule ${reasonIndex}`));
       list.markRemoved(ids, pendingBatchId);
 
       void api
@@ -87,7 +92,7 @@ export default function App() {
           addToast(error instanceof Error ? error.message : 'Remove failed', 'error');
         });
     },
-    [addToast, feed, isQueueView, queue],
+    [activeRule, addToast, feed, isQueueView, queue],
   );
 
   const remove = useCallback(
@@ -219,6 +224,28 @@ export default function App() {
     const items = isQueueView ? queue.state.items : feed.state.items;
     return items[0]?.subreddit ?? 'subreddit';
   }, [feed.state.items, isQueueView, queue.state.items]);
+
+  useEffect(() => {
+    setRulesLoading(true);
+    api
+      .subredditRules()
+      .then((response) => setSubredditRules(response.rules))
+      .catch(() => setSubredditRules([]))
+      .finally(() => setRulesLoading(false));
+  }, [subreddit]);
+
+  const handleItemToggle = useCallback(
+    (id: string) => {
+      if (activeRule) {
+        const reasonIndex = resolveRemovalReasonIndex(activeRule, settingsRef.current.removalReasons);
+        removeIds([id], reasonIndex);
+        return;
+      }
+      if (isQueueView) queue.toggleSelected(id);
+      else feed.toggleSelected(id);
+    },
+    [activeRule, feed, isQueueView, queue, removeIds],
+  );
 
   const focused = isQueueView ? queue.focused : feed.focused;
   const undoCountdown = isQueueView ? queue.state.undoCountdown : feed.state.undoCountdown;
@@ -447,6 +474,12 @@ export default function App() {
               isLoading={queue.state.isLoading}
               onFilterChange={queue.setFilter}
               onRefresh={queue.refresh}
+              rules={subredditRules}
+              rulesLoading={rulesLoading}
+              rulesExpanded={rulesExpanded}
+              onRulesExpandedChange={setRulesExpanded}
+              activeRuleId={activeRule?.id ?? null}
+              onActiveRuleChange={setActiveRule}
             />
 
             <section className="queue-list">
@@ -462,7 +495,7 @@ export default function App() {
                   modHandlers={modHandlers}
                   menuOpen={openMenuId === item.id}
                   onMenuOpenChange={(open) => setOpenMenuId(open ? item.id : null)}
-                  onToggle={queue.toggleSelected}
+                  onToggle={handleItemToggle}
                   onFocusIndex={queue.focusIndex}
                   onDragStart={queue.startDrag}
                   onDragUpdate={queue.updateDrag}
@@ -476,6 +509,12 @@ export default function App() {
             </section>
           </div>
 
+          {activeRule ? (
+            <div className="rule-mode-banner">
+              Remove mode: <strong>{activeRule.shortName}</strong> — click a row checkbox to remove with this rule.
+            </div>
+          ) : null}
+
           {selectedCount > 0 ? <SelectionBar selectedCount={selectedCount} focusedCount={focused ? 1 : 0} /> : null}
         </>
       ) : (
@@ -486,7 +525,19 @@ export default function App() {
             modHandlers={modHandlers}
             openMenuId={openMenuId}
             onMenuOpenChange={setOpenMenuId}
+            rules={subredditRules}
+            rulesLoading={rulesLoading}
+            rulesExpanded={rulesExpanded}
+            onRulesExpandedChange={setRulesExpanded}
+            activeRuleId={activeRule?.id ?? null}
+            onActiveRuleChange={setActiveRule}
+            onToggle={handleItemToggle}
           />
+          {activeRule ? (
+            <div className="rule-mode-banner">
+              Remove mode: <strong>{activeRule.shortName}</strong> — click a row checkbox to remove with this rule.
+            </div>
+          ) : null}
           {selectedCount > 0 ? <SelectionBar selectedCount={selectedCount} focusedCount={focused ? 1 : 0} /> : null}
         </>
       )}
