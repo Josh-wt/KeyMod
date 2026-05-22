@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { api } from './api';
+import { useFeedList } from './useFeedList';
 import { useKeymap } from './useKeymap';
 import { useQueue } from './useQueue';
 import { BanModal } from './components/BanModal';
@@ -9,6 +10,7 @@ import { FeaturePanel, type FeaturePanelKind } from './components/FeaturePanel';
 import { FlairModal } from './components/FlairModal';
 import { HelpOverlay } from './components/HelpOverlay';
 import { NoteModal } from './components/NoteModal';
+import { RemovalReasonModal } from './components/RemovalReasonModal';
 import { QueueItem as QueueItemRow } from './components/QueueItem';
 import { SelectionBar } from './components/SelectionBar';
 import { UndoToast } from './components/UndoToast';
@@ -18,10 +20,18 @@ import { DEFAULT_KEYMAP } from '../settings';
 import { createModHandlers } from './createModHandlers';
 import { runKeyAction } from './keyActions';
 import { QueueToolbar } from './components/QueueToolbar';
+import { FeedView } from './components/FeedView';
 
-type Modal = 'ban' | 'flair' | 'note' | null;
+type Modal = 'ban' | 'flair' | 'note' | 'remove' | null;
+type AppView = 'queue' | 'feed';
+
+function closestQueueRow(node: Node | null) {
+  const element = node instanceof Element ? node : node?.parentElement;
+  return element?.closest<HTMLElement>('.queue-row[data-queue-id]') ?? null;
+}
 
 export default function App() {
+  const [view, setView] = useState<AppView>('queue');
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [modal, setModal] = useState<Modal>(null);
   const [showHelp, setShowHelp] = useState(false);
@@ -33,6 +43,7 @@ export default function App() {
   const [lastRemovalReason, setLastRemovalReason] = useState('');
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [modalItem, setModalItem] = useState<QueueItem | null>(null);
+  const [removeAsSpam, setRemoveAsSpam] = useState(false);
 
   const addToast = useCallback((message: string, kind: Toast['kind'] = 'info', persistent = false) => {
     const toast = { id: crypto.randomUUID(), kind, message, persistent };
@@ -41,51 +52,80 @@ export default function App() {
   }, []);
 
   const queue = useQueue(addToast);
-  const selectedCount = queue.state.selectedIds.size;
+  const feed = useFeedList(addToast);
+  const isQueueView = view === 'queue';
+  const selectedCount = isQueueView ? queue.state.selectedIds.size : feed.state.selectedIds.size;
+
+  const clearSelection = useCallback(() => {
+    if (isQueueView) queue.clearSelection();
+    else feed.clearSelection();
+    window.getSelection()?.removeAllRanges();
+  }, [feed, isQueueView, queue]);
 
   const removeIds = useCallback(
-    async (ids: string[], reasonIndex: number, asSpam = false) => {
+    (ids: string[], reasonIndex: number, asSpam = false) => {
       if (!ids.length) return;
+      const list = isQueueView ? queue : feed;
+      const removedItems = list.visibleItems.filter((item) => ids.includes(item.id));
+      const pendingBatchId = crypto.randomUUID();
+
       setLastRemovalCount(ids.length);
       setLastRemovalReason(asSpam ? 'Spam' : `Rule ${reasonIndex}`);
-      try {
-        const response = await api.remove(ids, reasonIndex, asSpam);
-        queue.markRemoved(ids, response.batchId);
-        if (response.failed) addToast(`Removed ${response.ok}/${ids.length} items. ${response.failed} failed.`, 'warning');
-        else addToast(`Removed ${ids.length} items.`, 'success');
-      } catch (error) {
-        addToast(error instanceof Error ? error.message : 'Remove failed', 'error');
-      }
+      list.markRemoved(ids, pendingBatchId);
+
+      void api
+        .remove(ids, reasonIndex, asSpam)
+        .then((response) => {
+          list.setRemovalBatchId(response.batchId);
+          if (response.failed) {
+            void list.refresh();
+            addToast(`Removed ${response.ok}/${ids.length} items. ${response.failed} failed.`, 'warning');
+          }
+        })
+        .catch((error) => {
+          list.restoreItems(removedItems);
+          addToast(error instanceof Error ? error.message : 'Remove failed', 'error');
+        });
     },
-    [addToast, queue],
+    [addToast, feed, isQueueView, queue],
   );
 
   const remove = useCallback(
-    async (reasonIndex: number) => {
-      await removeIds(queue.targetIds, reasonIndex);
+    (reasonIndex: number) => {
+      const targetIds = isQueueView ? queue.targetIds : feed.targetIds;
+      removeIds(targetIds, reasonIndex);
     },
-    [queue.targetIds, removeIds],
+    [feed.targetIds, isQueueView, queue.targetIds, removeIds],
   );
 
   const focusItem = useCallback(
     (item: QueueItem) => {
-      const index = queue.state.items.findIndex((entry) => entry.id === item.id);
-      if (index >= 0) queue.focusIndex(index);
+      const items = isQueueView ? queue.visibleItems : feed.visibleItems;
+      const index = items.findIndex((entry) => entry.id === item.id);
+      if (index < 0) return;
+      if (isQueueView) queue.focusIndex(index);
+      else feed.focusIndex(index);
     },
-    [queue],
+    [feed, isQueueView, queue],
   );
 
   const undo = useCallback(async () => {
-    if (!queue.state.lastBatchId) return;
+    const batchId = isQueueView ? queue.state.lastBatchId : feed.state.lastBatchId;
+    if (!batchId) return;
     try {
-      const response = await api.undo(queue.state.lastBatchId);
-      queue.clearUndo();
-      await queue.load();
+      const response = await api.undo(batchId);
+      if (isQueueView) {
+        queue.clearUndo();
+        await queue.load();
+      } else {
+        feed.clearUndo();
+        feed.refresh();
+      }
       addToast(`Restored ${response.restored} items.`, response.failed ? 'warning' : 'success');
     } catch (error) {
       addToast(error instanceof Error ? error.message : 'Undo failed', 'error');
     }
-  }, [addToast, queue]);
+  }, [addToast, feed, isQueueView, queue]);
 
   const settingsRef = useRef<AppSettings>({
     keymap: DEFAULT_KEYMAP,
@@ -104,20 +144,33 @@ export default function App() {
     [focusItem],
   );
 
+  const openRemovalModal = useCallback(
+    (item: QueueItem, asSpam = false) => {
+      focusItem(item);
+      setModalItem(item);
+      setRemoveAsSpam(asSpam);
+      setModal('remove');
+      setOpenMenuId(null);
+    },
+    [focusItem],
+  );
+
   const dispatch = useCallback(
     async (action: KeyAction) => {
+      const list = isQueueView ? queue : feed;
       await runKeyAction(action, {
-        targetIds: queue.targetIds,
-        focused: queue.focused,
+        targetIds: list.targetIds,
+        focused: list.focused,
+        findItem: (id) => list.visibleItems.find((item) => item.id === id),
         removalReasons: settingsRef.current.removalReasons,
-        patchItem: queue.patchItem,
-        markApproved: queue.markApproved,
+        patchItem: list.patchItem,
+        markApproved: list.markApproved,
         removeIds,
-        moveFocus: queue.moveFocus,
-        toggleFocused: queue.toggleFocused,
-        selectAllVisible: queue.selectAllVisible,
-        clearSelection: queue.clearSelection,
-        refresh: queue.refresh,
+        moveFocus: list.moveFocus,
+        toggleFocused: list.toggleFocused,
+        selectAllVisible: list.selectAllVisible,
+        clearSelection,
+        refresh: list.refresh,
         setShowHelp,
         undo,
         setUserPanel,
@@ -125,14 +178,14 @@ export default function App() {
         addToast,
       });
     },
-    [addToast, openModalForItem, queue, removeIds, undo],
+    [addToast, clearSelection, feed, isQueueView, openModalForItem, queue, removeIds, undo],
   );
 
   const settings = useKeymap(
     dispatch,
     remove,
     async (reasonIndex) => {
-      const focused = queue.focused;
+      const focused = isQueueView ? queue.focused : feed.focused;
       if (!focused) return;
       const banReason = settingsRef.current.banReasons.find((item) => item.index === reasonIndex);
       if (!banReason?.reason.trim()) {
@@ -155,30 +208,47 @@ export default function App() {
     },
     modal !== null,
     addToast,
-    queue.clearSelection,
+    clearSelection,
   );
 
   useEffect(() => {
     settingsRef.current = settings;
   }, [settings]);
 
-  const subreddit = useMemo(() => queue.state.items[0]?.subreddit ?? 'subreddit', [queue.state.items]);
-  const focused = queue.focused;
+  const subreddit = useMemo(() => {
+    const items = isQueueView ? queue.state.items : feed.state.items;
+    return items[0]?.subreddit ?? 'subreddit';
+  }, [feed.state.items, isQueueView, queue.state.items]);
+
+  const focused = isQueueView ? queue.focused : feed.focused;
+  const undoCountdown = isQueueView ? queue.state.undoCountdown : feed.state.undoCountdown;
 
   const modHandlers = useMemo(
     () =>
       createModHandlers({
         removalReasons: settings.removalReasons,
+        findItem: (id) => (isQueueView ? queue.visibleItems : feed.visibleItems).find((item) => item.id === id),
+        refresh: () => {
+          if (isQueueView) queue.refresh();
+          else feed.refresh();
+        },
         focusItem,
         setOpenMenuId,
         removeIds,
-        markApproved: queue.markApproved,
-        patchItem: queue.patchItem,
+        markApproved: (ids) => {
+          if (isQueueView) queue.markApproved(ids);
+          else feed.markApproved(ids);
+        },
+        patchItem: (id, patch) => {
+          if (isQueueView) queue.patchItem(id, patch);
+          else feed.patchItem(id, patch);
+        },
         openModalForItem,
+        openRemovalModal,
         setUserPanel,
         addToast,
       }),
-    [addToast, focusItem, openModalForItem, queue.markApproved, queue.patchItem, removeIds, settings.removalReasons],
+    [addToast, feed, focusItem, isQueueView, openModalForItem, openRemovalModal, queue, removeIds, settings.removalReasons],
   );
 
   const actionItem = modalItem ?? focused;
@@ -200,23 +270,57 @@ export default function App() {
       if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
 
       const range = selection.getRangeAt(0);
-      const selectedRowIds = Array.from(document.querySelectorAll<HTMLElement>('.queue-row[data-queue-id]'))
-        .filter((row) => {
+      const selectedRows = new Set<HTMLElement>();
+      const addRow = (row: HTMLElement | null) => {
+        if (row) selectedRows.add(row);
+      };
+
+      addRow(closestQueueRow(selection.anchorNode));
+      addRow(closestQueueRow(selection.focusNode));
+
+      const queueRows = Array.from(document.querySelectorAll<HTMLElement>('.queue-row[data-queue-id]'));
+      const anchorRow = closestQueueRow(selection.anchorNode);
+      const focusRow = closestQueueRow(selection.focusNode);
+      if (anchorRow && focusRow && anchorRow !== focusRow) {
+        const anchorIndex = queueRows.indexOf(anchorRow);
+        const focusIndex = queueRows.indexOf(focusRow);
+        if (anchorIndex >= 0 && focusIndex >= 0) {
+          const [start, end] = [anchorIndex, focusIndex].sort((a, b) => a - b);
+          queueRows.slice(start, end + 1).forEach(addRow);
+        }
+      }
+
+      queueRows.forEach((row) => {
+        try {
+          if (range.intersectsNode(row)) addRow(row);
+        } catch {
+          // Some browsers can reject intersection checks against complex nested markup.
+        }
+      });
+
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+        acceptNode(node) {
           try {
-            return range.intersectsNode(row);
+            return range.intersectsNode(node) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
           } catch {
-            return false;
+            return NodeFilter.FILTER_REJECT;
           }
-        })
+        },
+      });
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) addRow(closestQueueRow(node));
+
+      const selectedRowIds = Array.from(selectedRows)
         .map((row) => row.dataset.queueId)
         .filter((id): id is string => Boolean(id));
 
-      queue.selectIds(selectedRowIds);
+      if (isQueueView) queue.selectIds(selectedRowIds);
+      else feed.selectIds(selectedRowIds);
     }
 
     function onPointerUp() {
       selectRowsFromNativeTextSelection();
-      queue.endDrag();
+      if (isQueueView) queue.endDrag();
+      else feed.endDrag();
     }
     window.addEventListener('mouseup', onPointerUp);
     window.addEventListener('pointerup', onPointerUp);
@@ -224,11 +328,11 @@ export default function App() {
       window.removeEventListener('mouseup', onPointerUp);
       window.removeEventListener('pointerup', onPointerUp);
     };
-  }, [queue.endDrag]);
+  }, [feed, isQueueView, queue]);
 
   useEffect(() => {
     setOpenMenuId(null);
-  }, [queue.state.focusedIndex]);
+  }, [feed.state.focusedIndex, isQueueView, queue.state.focusedIndex]);
 
   useEffect(() => {
     setFocusedUserInfo(null);
@@ -237,50 +341,7 @@ export default function App() {
   }, [focused?.author]);
 
   const commands = useMemo<Command[]>(() => {
-    const run = (action: KeyAction) => () => {
-      void dispatch(action);
-    };
     return [
-      {
-        id: 'approve',
-        title: 'Approve selection',
-        subtitle: 'Clear items from the mod queue',
-        section: 'Queue Tools',
-        keywords: ['approve', 'accept', 'ok'],
-        run: run('approve'),
-      },
-      {
-        id: 'spam',
-        title: 'Mark as spam',
-        subtitle: 'Remove and flag as spam',
-        section: 'Queue Tools',
-        keywords: ['spam', 'remove'],
-        run: run('spam'),
-      },
-      {
-        id: 'lock',
-        title: 'Toggle lock',
-        subtitle: 'Lock or unlock comments',
-        section: 'Queue Tools',
-        keywords: ['lock', 'comments'],
-        run: run('lock'),
-      },
-      {
-        id: 'ignore',
-        title: 'Ignore reports',
-        subtitle: 'Toggle report ignore on selection',
-        section: 'Queue Tools',
-        keywords: ['ignore', 'reports'],
-        run: run('ignoreReports'),
-      },
-      {
-        id: 'refresh',
-        title: 'Refresh queue',
-        subtitle: 'Reload mod queue from Reddit',
-        section: 'Queue Tools',
-        keywords: ['refresh', 'reload'],
-        run: run('refresh'),
-      },
       {
         id: 'notes-open',
         title: 'Open user notes',
@@ -330,12 +391,34 @@ export default function App() {
         run: () => setFeaturePanel('automod'),
       },
     ];
-  }, [dispatch]);
+  }, []);
 
   return (
-    <main className="app-shell feed-shell" onMouseUp={queue.endDrag}>
+    <main
+      className="app-shell feed-shell"
+      onMouseUp={() => {
+        if (isQueueView) queue.endDrag();
+        else feed.endDrag();
+      }}
+    >
       <header className="topbar topbar-minimal">
         <span className="feed-context">r/{subreddit}</span>
+        <nav className="view-tabs" aria-label="Switch view">
+          <button
+            className={view === 'queue' ? 'active' : ''}
+            onClick={() => setView('queue')}
+            aria-pressed={view === 'queue'}
+          >
+            Queue
+          </button>
+          <button
+            className={view === 'feed' ? 'active' : ''}
+            onClick={() => setView('feed')}
+            aria-pressed={view === 'feed'}
+          >
+            Feed
+          </button>
+        </nav>
         <nav className="topbar-actions">
           <button onClick={() => setShowCommandPalette(true)} aria-label="Open global actions">
             Ctrl+K
@@ -355,39 +438,58 @@ export default function App() {
         </div>
       ))}
 
-      <QueueToolbar
-        filter={queue.state.filter}
-        stats={queue.stats}
-        isLoading={queue.state.isLoading}
-        onFilterChange={queue.setFilter}
-        onRefresh={queue.refresh}
-      />
+      {view === 'queue' ? (
+        <>
+          <div className="queue-workspace">
+            <QueueToolbar
+              filter={queue.state.filter}
+              stats={queue.stats}
+              isLoading={queue.state.isLoading}
+              onFilterChange={queue.setFilter}
+              onRefresh={queue.refresh}
+            />
 
-      <section className="queue-list">
-        {queue.visibleItems.map((item, index) => (
-          <QueueItemRow
-            key={item.id}
-            item={item}
-            index={index}
-            focused={index === queue.state.focusedIndex}
-            selected={queue.state.selectedIds.has(item.id)}
-            dragPreviewed={queue.state.dragPreviewIds.has(item.id)}
+            <section className="queue-list">
+              {queue.visibleItems.map((item, index) => (
+                <QueueItemRow
+                  key={item.id}
+                  item={item}
+                  index={index}
+                  previousItem={index > 0 ? queue.visibleItems[index - 1] : undefined}
+                  focused={index === queue.state.focusedIndex && queue.state.focusedIndex >= 0}
+                  selected={queue.state.selectedIds.has(item.id)}
+                  dragPreviewed={queue.state.dragPreviewIds.has(item.id)}
+                  modHandlers={modHandlers}
+                  menuOpen={openMenuId === item.id}
+                  onMenuOpenChange={(open) => setOpenMenuId(open ? item.id : null)}
+                  onToggle={queue.toggleSelected}
+                  onFocusIndex={queue.focusIndex}
+                  onDragStart={queue.startDrag}
+                  onDragUpdate={queue.updateDrag}
+                  onFocusLeave={queue.clearHover}
+                />
+              ))}
+              {queue.state.isLoading ? <div className="empty-state">Loading queue</div> : null}
+              {!queue.state.isLoading && !queue.visibleItems.length ? (
+                <div className="empty-state">{queue.state.items.length ? 'No items match this filter' : 'Queue is empty'}</div>
+              ) : null}
+            </section>
+          </div>
+
+          {selectedCount > 0 ? <SelectionBar selectedCount={selectedCount} focusedCount={focused ? 1 : 0} /> : null}
+        </>
+      ) : (
+        <>
+          <FeedView
+            subreddit={subreddit}
+            feed={feed}
             modHandlers={modHandlers}
-            menuOpen={openMenuId === item.id}
-            onMenuOpenChange={(open) => setOpenMenuId(open ? item.id : null)}
-            onToggle={queue.toggleSelected}
-            onFocusIndex={queue.focusIndex}
-            onDragStart={queue.startDrag}
-            onDragUpdate={queue.updateDrag}
+            openMenuId={openMenuId}
+            onMenuOpenChange={setOpenMenuId}
           />
-        ))}
-        {queue.state.isLoading ? <div className="empty-state">Loading queue</div> : null}
-        {!queue.state.isLoading && !queue.visibleItems.length ? (
-          <div className="empty-state">{queue.state.items.length ? 'No items match this filter' : 'Queue is empty'}</div>
-        ) : null}
-      </section>
-
-      {selectedCount > 0 ? <SelectionBar selectedCount={selectedCount} focusedCount={focused ? 1 : 0} /> : null}
+          {selectedCount > 0 ? <SelectionBar selectedCount={selectedCount} focusedCount={focused ? 1 : 0} /> : null}
+        </>
+      )}
 
       <div className="toast-stack">
         {toasts.map((toast) => (
@@ -397,13 +499,35 @@ export default function App() {
         ))}
       </div>
 
-      {queue.state.undoCountdown !== null ? (
+      {undoCountdown !== null ? (
         <UndoToast
           count={lastRemovalCount}
           reason={lastRemovalReason}
-          countdown={queue.state.undoCountdown}
+          countdown={undoCountdown}
           onUndo={undo}
-          onDone={queue.clearUndo}
+          onDone={() => {
+            if (isQueueView) queue.clearUndo();
+            else feed.clearUndo();
+          }}
+        />
+      ) : null}
+
+      {modal === 'remove' && actionItem ? (
+        <RemovalReasonModal
+          title={removeAsSpam ? 'Remove as spam' : 'Remove item'}
+          reasons={settings.removalReasons}
+          asSpam={removeAsSpam}
+          onCancel={() => {
+            setModal(null);
+            setModalItem(null);
+            setRemoveAsSpam(false);
+          }}
+          onSubmit={(reasonIndex) => {
+            removeIds([actionItem.id], reasonIndex, removeAsSpam);
+            setModal(null);
+            setModalItem(null);
+            setRemoveAsSpam(false);
+          }}
         />
       ) : null}
 
@@ -432,7 +556,9 @@ export default function App() {
           onSelect={async (flairId) => {
             const response = await api.flair(actionItem.id, flairId);
             if (response.flairText !== undefined) {
-              queue.patchItem(actionItem.id, { flairText: response.flairText || undefined });
+              const patch = { flairText: response.flairText || undefined };
+              if (isQueueView) queue.patchItem(actionItem.id, patch);
+              else feed.patchItem(actionItem.id, patch);
             }
             setModal(null);
             setModalItem(null);

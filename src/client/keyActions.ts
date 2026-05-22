@@ -15,10 +15,11 @@ type ToastFn = (message: string, kind?: 'info' | 'warning' | 'error' | 'success'
 type Deps = {
   targetIds: string[];
   focused: QueueItem | null;
+  findItem: (id: string) => QueueItem | undefined;
   removalReasons: RemovalReason[];
   patchItem: (id: string, patch: Partial<QueueItem>) => void;
   markApproved: (ids: string[]) => void;
-  removeIds: (ids: string[], reasonIndex: number, asSpam?: boolean) => Promise<void>;
+  removeIds: (ids: string[], reasonIndex: number, asSpam?: boolean) => void;
   moveFocus: (direction: 1 | -1) => void;
   toggleFocused: () => void;
   selectAllVisible: () => void;
@@ -39,6 +40,7 @@ export async function runKeyAction(action: KeyAction, deps: Deps): Promise<void>
   const {
     targetIds,
     focused,
+    findItem,
     removalReasons,
     patchItem,
     markApproved,
@@ -107,7 +109,7 @@ export async function runKeyAction(action: KeyAction, deps: Deps): Promise<void>
   }
   if (action === 'spam') {
     if (!targetIds.length) return;
-    await removeIds(targetIds, defaultRemovalIndex(removalReasons), true);
+    removeIds(targetIds, defaultRemovalIndex(removalReasons), true);
     return;
   }
   if (action === 'mute' && focused) {
@@ -122,74 +124,73 @@ export async function runKeyAction(action: KeyAction, deps: Deps): Promise<void>
 
   if (!targetIds.length) return;
 
-  try {
-    if (action === 'approve') {
-      const response = await api.approve(targetIds);
-      if (response.failed) addToast(`Approved ${response.ok}/${targetIds.length}. ${response.failed} failed.`, 'warning');
-      else {
-        markApproved(targetIds);
-        addToast(`Approved ${response.ok}.`, 'success');
-      }
+  const reportModResult = (label: string, run: () => Promise<{ failed: number; ok: number; errors?: string[] }>) => {
+    void run()
+      .then((response) => {
+        if (response.failed) addToast(response.errors?.[0] ?? `${label} failed.`, 'error');
+      })
+      .catch((error) => addToast(error instanceof Error ? error.message : `${label} failed`, 'error'));
+  };
+
+  if (action === 'approve') {
+    markApproved(targetIds);
+    void api
+      .approve(targetIds)
+      .then((response) => {
+        if (response.failed) {
+          refresh();
+          addToast(`Approved ${response.ok}/${targetIds.length}. ${response.failed} failed.`, 'warning');
+        }
+      })
+      .catch((error) => {
+        refresh();
+        addToast(error instanceof Error ? error.message : 'Approve failed', 'error');
+      });
+    return;
+  }
+
+  if (action === 'lock') {
+    reportModResult('Lock', () => runLock(targetIds, patchItem, findItem));
+    return;
+  }
+
+  if (action === 'nsfw') {
+    const postIds = targetIds.filter((id) => id.startsWith('t3_'));
+    if (!postIds.length) {
+      addToast('NSFW applies to posts only.', 'warning');
       return;
     }
+    reportModResult('NSFW', () => runNsfw(postIds, patchItem, findItem));
+    return;
+  }
 
-    if (action === 'lock') {
-      const response = await runLock(targetIds, patchItem);
-      if (response.failed) addToast(response.errors?.[0] ?? 'Lock failed.', 'error');
-      else addToast(`Updated lock on ${response.ok} item(s).`, 'success');
+  if (action === 'spoiler') {
+    const postIds = targetIds.filter((id) => id.startsWith('t3_'));
+    if (!postIds.length) {
+      addToast('Spoiler applies to posts only.', 'warning');
       return;
     }
+    reportModResult('Spoiler', () => runSpoiler(postIds, patchItem, findItem));
+    return;
+  }
 
-    if (action === 'nsfw') {
-      const postIds = targetIds.filter((id) => id.startsWith('t3_'));
-      if (!postIds.length) {
-        addToast('NSFW applies to posts only.', 'warning');
-        return;
-      }
-      const response = await runNsfw(postIds, patchItem);
-      if (response.failed) addToast(response.errors?.[0] ?? 'NSFW update failed.', 'error');
-      else addToast(`Updated NSFW on ${response.ok} post(s).`, 'success');
+  if (action === 'sticky') {
+    const postIds = targetIds.filter((id) => id.startsWith('t3_'));
+    if (!postIds.length) {
+      addToast('Highlights apply to posts only.', 'warning');
       return;
     }
+    reportModResult('Highlight', () => runHighlight(postIds, patchItem, findItem));
+    return;
+  }
 
-    if (action === 'spoiler') {
-      const postIds = targetIds.filter((id) => id.startsWith('t3_'));
-      if (!postIds.length) {
-        addToast('Spoiler applies to posts only.', 'warning');
-        return;
-      }
-      const response = await runSpoiler(postIds, patchItem);
-      if (response.failed) addToast(response.errors?.[0] ?? 'Spoiler update failed.', 'error');
-      else addToast(`Updated spoiler on ${response.ok} post(s).`, 'success');
-      return;
-    }
+  if (action === 'distinguish') {
+    reportModResult('Distinguish', () => runDistinguish(targetIds, patchItem, findItem));
+    return;
+  }
 
-    if (action === 'sticky') {
-      const postIds = targetIds.filter((id) => id.startsWith('t3_'));
-      if (!postIds.length) {
-        addToast('Highlights apply to posts only.', 'warning');
-        return;
-      }
-      const response = await runHighlight(postIds, patchItem);
-      if (response.failed) addToast(response.errors?.[0] ?? 'Highlight update failed.', 'error');
-      else addToast(`Updated highlights on ${response.ok} post(s).`, 'success');
-      return;
-    }
-
-    if (action === 'distinguish') {
-      const response = await runDistinguish(targetIds, patchItem);
-      if (response.failed) addToast(response.errors?.[0] ?? 'Distinguish failed.', 'error');
-      else addToast(`Distinguished ${response.ok} item(s).`, 'success');
-      return;
-    }
-
-    if (action === 'ignoreReports') {
-      const response = await runIgnoreReports(targetIds, patchItem);
-      if (response.failed) addToast(response.errors?.[0] ?? 'Ignore reports failed.', 'error');
-      else addToast(`Updated report ignore on ${response.ok} item(s).`, 'success');
-    }
-  } catch (error) {
-    addToast(error instanceof Error ? error.message : 'Action failed', 'error');
+  if (action === 'ignoreReports') {
+    reportModResult('Ignore reports', () => runIgnoreReports(targetIds, patchItem, findItem));
   }
 }
 

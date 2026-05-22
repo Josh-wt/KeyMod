@@ -20,14 +20,12 @@ export function QueueMeta({ item }: Props) {
   if (!status.length) return null;
 
   return (
-    <div className="queue-meta" aria-label="Moderation metadata">
-      <div className="queue-meta-status">
-        {status.map((entry) => (
-          <span key={entry.key} className="queue-status-tag">
-            {entry.label}
-          </span>
-        ))}
-      </div>
-    </div>
+    <>
+      {status.map((entry) => (
+        <span key={entry.key} className="queue-status-tag" data-status={entry.key}>
+          {entry.label}
+        </span>
+      ))}
+    </>
   );
 }

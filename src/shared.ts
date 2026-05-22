@@ -54,6 +54,8 @@ export type QueueItem = {
 
 export type QueueFilter = 'all' | 'posts' | 'comments' | 'reported';
 
+export type FeedSort = 'hot' | 'new' | 'top';
+
 export type KeyAction =
   | 'approve'
   | 'ban'

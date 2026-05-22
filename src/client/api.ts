@@ -3,6 +3,7 @@ import type {
   AutomodPanelData,
   AutomodValidation,
   CrowdControlLevel,
+  FeedSort,
   ModLogMatrix,
   NotificationCounts,
   QueueItem,
@@ -37,6 +38,13 @@ export const api = {
   settings: () => request<AppSettings>('/api/settings'),
   queue: (after?: string | null) =>
     request<{ items: QueueItem[]; after: string | null }>(`/api/queue${after ? `?after=${encodeURIComponent(after)}` : ''}`),
+  feed: (sort: FeedSort = 'hot', after?: string | null) => {
+    const params = new URLSearchParams({ sort });
+    if (after) params.set('after', after);
+    return request<{ items: QueueItem[]; after: string | null }>(`/api/feed?${params}`);
+  },
+  feedComments: (postId: string) =>
+    request<{ comments: QueueItem[] }>(`/api/feed/${encodeURIComponent(postId)}/comments`),
   remove: (ids: string[], removalReasonIndex: number, asSpam = false) =>
     request<{ batchId: string; ok: number; failed: number }>('/api/remove', {
       method: 'POST',

@@ -32,10 +32,9 @@ export function FeedComment({ item, modHandlers, menuOpen = false, onMenuOpenCha
         <div className="feed-comment-meta">
           <strong>u/{item.author}</strong>
           <span>{feedAge(item.createdAt)} ago</span>
+          <QueueMeta item={item} />
         </div>
       </header>
-
-      <QueueMeta item={item} />
 
       <p className="feed-comment-text">{item.body || item.title}</p>
 

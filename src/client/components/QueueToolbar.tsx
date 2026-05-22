@@ -25,7 +25,11 @@ const filters: Array<{ id: QueueFilter; label: string; count?: (stats: Stats) =>
 
 export function QueueToolbar({ filter, stats, isLoading, onFilterChange, onRefresh }: Props) {
   return (
-    <div className="queue-toolbar">
+    <aside className="filter-sidebar" aria-label="Queue controls">
+      <button type="button" className="filter-sidebar-refresh" onClick={onRefresh} disabled={isLoading}>
+        <RefreshCw size={16} className={isLoading ? 'spin' : ''} />
+        <span>Refresh</span>
+      </button>
       <div className="queue-filters" role="tablist" aria-label="Queue filters">
         {filters.map((entry) => (
           <button
@@ -34,6 +38,7 @@ export function QueueToolbar({ filter, stats, isLoading, onFilterChange, onRefre
             role="tab"
             aria-selected={filter === entry.id}
             className={filter === entry.id ? 'active' : ''}
+            data-filter={entry.id}
             onClick={() => onFilterChange(entry.id)}
           >
             {entry.label}
@@ -41,9 +46,6 @@ export function QueueToolbar({ filter, stats, isLoading, onFilterChange, onRefre
           </button>
         ))}
       </div>
-      <button type="button" className="queue-refresh" onClick={onRefresh} disabled={isLoading} aria-label="Refresh queue">
-        <RefreshCw size={16} className={isLoading ? 'spin' : ''} />
-      </button>
-    </div>
+    </aside>
   );
 }

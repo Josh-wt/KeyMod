@@ -10,6 +10,7 @@ import { QueueReportTags } from './QueueReportTags';
 type Props = {
   item: QueueItemType;
   index: number;
+  previousItem?: QueueItemType;
   focused: boolean;
   selected: boolean;
   dragPreviewed: boolean;
@@ -20,7 +21,16 @@ type Props = {
   onFocusIndex: (index: number) => void;
   onDragStart: (index: number) => void;
   onDragUpdate: (index: number) => void;
+  onFocusLeave: () => void;
+  onOpenComments?: (item: QueueItemType) => void;
+  expandPost?: boolean;
 };
+
+function previousItemIsParentThread(previous: QueueItemType | undefined, comment: QueueItemType) {
+  if (!previous || previous.type !== 'post' || comment.type !== 'comment') return false;
+  const parentPostId = comment.postId ?? comment.parentPost?.id;
+  return Boolean(parentPostId && previous.id === parentPostId);
+}
 
 function stop(event: MouseEvent) {
   event.stopPropagation();
@@ -29,6 +39,7 @@ function stop(event: MouseEvent) {
 export const QueueItem = memo(function QueueItem({
   item,
   index,
+  previousItem,
   focused,
   selected,
   dragPreviewed,
@@ -39,9 +50,13 @@ export const QueueItem = memo(function QueueItem({
   onFocusIndex,
   onDragStart,
   onDragUpdate,
+  onFocusLeave,
+  onOpenComments,
+  expandPost = false,
 }: Props) {
   const isComment = item.type === 'comment';
   const parentPost = item.parentPost;
+  const continuesParentThreadAbove = previousItemIsParentThread(previousItem, item);
   const hasReports = reportCount(item) > 0;
   const showPostReports = !isComment && hasReports;
 
@@ -54,6 +69,10 @@ export const QueueItem = memo(function QueueItem({
         onDragStart(index);
       }}
       onMouseEnter={() => onFocusIndex(index)}
+      onMouseLeave={(e) => {
+        const related = e.relatedTarget as Element | null;
+        if (!related?.closest?.('.queue-row')) onFocusLeave();
+      }}
       onMouseOver={() => onDragUpdate(index)}
     >
       {showPostReports ? <QueueReportTags item={item} /> : null}
@@ -70,7 +89,9 @@ export const QueueItem = memo(function QueueItem({
       </button>
 
       {isComment ? (
-        <div className={`comment-queue-stack${parentPost ? ' comment-queue-stack-threaded' : ''}`}>
+        <div
+          className={`comment-queue-stack${parentPost ? ' comment-queue-stack-threaded' : ''}${parentPost && !continuesParentThreadAbove ? ' comment-queue-stack-detached' : ''}`}
+        >
           {parentPost ? (
             <div className="comment-thread-parent">
               <div className="comment-thread-gutter" aria-hidden="true" />
@@ -95,9 +116,11 @@ export const QueueItem = memo(function QueueItem({
         <FeedPostCard
           post={feedPostFromItem(item)}
           item={item}
+          expanded={expandPost}
           modHandlers={modHandlers}
           menuOpen={menuOpen}
           onMenuOpenChange={onMenuOpenChange}
+          onOpenComments={onOpenComments}
           onStop={stop}
         />
       )}

@@ -3,6 +3,7 @@ import { context as requestContext, createServer, getServerPort, reddit, redis, 
 import type { TaskRequest, TaskResponse } from '@devvit/scheduler';
 import type { MenuItemRequest, TriggerResponse, UiResponse } from '@devvit/web/shared';
 import { Hono } from 'hono';
+import { attributeModAction, attributeUserModAction, removalAttributionSummary } from './actingModerator';
 import { resolveSettings } from '../settings';
 import type {
   AutomodPanelData,
@@ -290,6 +291,43 @@ async function listingItems<T>(listing: { all?: () => Promise<T[]>; get?: (count
   if (typeof listing.get === 'function') return listing.get(limit);
   if (typeof listing.all === 'function') return listing.all();
   return [];
+}
+
+type CommentTreeItem = {
+  id?: string;
+  replies?: { all?: () => Promise<CommentTreeItem[]>; get?: (count: number) => Promise<CommentTreeItem[]> };
+};
+
+async function allCommentListingItems(listing: {
+  all?: () => Promise<CommentTreeItem[]>;
+  get?: (count: number) => Promise<CommentTreeItem[]>;
+}): Promise<CommentTreeItem[]> {
+  if (typeof listing.all === 'function') return listing.all();
+  return listingItems(listing, 1000);
+}
+
+async function commentTreeItems(listing: {
+  all?: () => Promise<CommentTreeItem[]>;
+  get?: (count: number) => Promise<CommentTreeItem[]>;
+}): Promise<CommentTreeItem[]> {
+  const items: CommentTreeItem[] = [];
+  const seen = new Set<string>();
+
+  async function append(comments: CommentTreeItem[]): Promise<void> {
+    for (const comment of comments) {
+      const id = String(comment.id ?? '');
+      if (id && seen.has(id)) continue;
+      if (id) seen.add(id);
+      items.push(comment);
+
+      if (comment.replies) {
+        await append(await allCommentListingItems(comment.replies));
+      }
+    }
+  }
+
+  await append(await allCommentListingItems(listing));
+  return items;
 }
 
 async function listingPage<T extends { id?: string; name?: string }>(
@@ -628,6 +666,40 @@ app.use('/api/*', async (c, next) => {
 
 app.get('/api/settings', async (c) => c.json(await resolveSettings(settings)));
 
+app.get('/api/feed', async (c) => {
+  const subredditName = getSubredditName();
+  const sort = (c.req.query('sort') ?? 'hot') as 'hot' | 'new' | 'top';
+  const after = c.req.query('after') || undefined;
+
+  let listing;
+  if (sort === 'new') {
+    listing = reddit.getNewPosts({ subredditName, limit: 25, after });
+  } else if (sort === 'top') {
+    listing = reddit.getTopPosts({ subredditName, limit: 25, after });
+  } else {
+    listing = reddit.getHotPosts({ subredditName, limit: 25, after });
+  }
+
+  const page = await listingPage(listing, 25);
+  const icon = await getSubredditIcon(subredditName);
+  const items = page.items.map((item) => ({ ...normalizeThing(item, subredditName), subredditIcon: icon }));
+
+  return c.json({ items, after: page.after });
+});
+
+app.get('/api/feed/:postId/comments', async (c) => {
+  const postId = c.req.param('postId');
+  if (!postId.startsWith('t3_')) return c.json({ error: 'Post comments require a post id.' }, 400);
+
+  const subredditName = getSubredditName();
+  const icon = await getSubredditIcon(subredditName);
+  const comments = await commentTreeItems(reddit.getComments({ postId: postId as never, pageSize: 100, depth: 10 }));
+
+  return c.json({
+    comments: comments.map((comment) => ({ ...normalizeThing(comment, subredditName), subredditIcon: icon })),
+  });
+});
+
 app.get('/api/queue', async (c) => {
   const subredditName = getSubredditName();
   const after = c.req.query('after') || undefined;
@@ -653,6 +725,11 @@ app.post('/api/remove', async (c) => {
   );
   const result = await allSettledAction(ids, (id) => reddit.remove(id as never, Boolean(asSpam)));
 
+  const appSettings = await resolveSettings(settings);
+  await attributeModAction(items, removalAttributionSummary(removalReasonIndex, asSpam, appSettings.removalReasons), {
+    label: asSpam ? 'SPAM_WARNING' : undefined,
+  });
+
   await redisSetJson(`undo:batch:${batchId}`, { items, removalReasonIndex } satisfies PendingRemovalBatch, 12_000);
   await scheduler.runJob({
     name: 'finalize_removal',
@@ -671,18 +748,31 @@ app.post('/api/undo', async (c) => {
   const pending = await redisGetJson<PendingRemovalBatch>(`undo:batch:${batchId}`);
   await redis.del(`undo:batch:${batchId}`);
   const result = await allSettledAction(pending?.items ?? [], (item) => reddit.approve(item.id as never));
+  await attributeModAction(pending?.items ?? [], 'Restored (undo) via KeyModerator.');
   return c.json({ restored: result.ok, failed: result.failed });
 });
 
 app.post('/api/approve', async (c) => {
   const { ids } = await c.req.json<{ ids: string[] }>();
-  return c.json(
-    await runModActions(ids, async (id) => {
-      const thing = await getThing(id);
-      await thing.approve();
-      return {};
-    }),
-  );
+  const subredditName = getSubredditName();
+  const attributionItems = (
+    await Promise.all(
+      ids.map(async (id) => {
+        const thing = await getThing(id);
+        const item = normalizeThing(thing, subredditName);
+        return { id: item.id, author: item.author, type: item.type };
+      }),
+    )
+  ).filter((item) => item.author && item.author !== '[deleted]');
+
+  const response = await runModActions(ids, async (id) => {
+    const thing = await getThing(id);
+    await thing.approve();
+    return {};
+  });
+
+  await attributeModAction(attributionItems, 'Approved via KeyModerator.');
+  return c.json(response);
 });
 
 app.post('/api/lock', async (c) => {
@@ -781,9 +871,11 @@ app.post('/api/mute', async (c) => {
   const subreddit = await reddit.getSubredditByName(getSubredditName());
   if (unmute) {
     await subreddit.unmuteUser(username);
+    await attributeUserModAction(username, 'Unmuted via KeyModerator.');
     return c.json({ ok: true, muted: false });
   }
   await subreddit.muteUser(username, note);
+  await attributeUserModAction(username, 'Muted via KeyModerator.');
   return c.json({ ok: true, muted: true });
 });
 
@@ -818,6 +910,10 @@ app.post('/api/ban', async (c) => {
     message: body.message,
     note: body.note,
     context: body.context,
+  });
+  await attributeUserModAction(body.username, `Banned via KeyModerator (${body.reason}).`, {
+    label: body.duration === 'permanent' ? 'PERMA_BAN' : 'BAN',
+    redditId: body.context,
   });
   return c.json({ ok: true });
 });
