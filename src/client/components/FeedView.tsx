@@ -15,11 +15,12 @@ type Props = {
   onMenuOpenChange: (id: string | null) => void;
   rules: SubredditRule[];
   rulesLoading: boolean;
-  rulesExpanded: boolean;
-  onRulesExpandedChange: (expanded: boolean) => void;
-  selectedRuleId: string | null;
+  rulesPanelExpanded: boolean;
+  onRulesPanelExpandedChange: (expanded: boolean) => void;
+  expandedRuleId: string | null;
   activeRuleId: string | null;
-  onRuleClick: (rule: SubredditRule) => void;
+  onRuleExpand: (ruleId: string) => void;
+  onRemovalModeToggle: (rule: SubredditRule) => void;
   onToggle: (id: string) => void;
 };
 
@@ -33,11 +34,12 @@ export function FeedView({
   onMenuOpenChange,
   rules,
   rulesLoading,
-  rulesExpanded,
-  onRulesExpandedChange,
-  selectedRuleId,
+  rulesPanelExpanded,
+  onRulesPanelExpandedChange,
+  expandedRuleId,
   activeRuleId,
-  onRuleClick,
+  onRuleExpand,
+  onRemovalModeToggle,
   onToggle,
 }: Props) {
   const { state, visibleItems } = feed;
@@ -48,40 +50,43 @@ export function FeedView({
         <RulesSidebar
           rules={rules}
           isLoading={rulesLoading}
-          expanded={rulesExpanded}
-          onExpandedChange={onRulesExpandedChange}
-          selectedRuleId={selectedRuleId}
+          panelExpanded={rulesPanelExpanded}
+          onPanelExpandedChange={onRulesPanelExpandedChange}
+          expandedRuleId={expandedRuleId}
           activeRuleId={activeRuleId}
-          onRuleClick={onRuleClick}
+          onRuleExpand={onRuleExpand}
+          onRemovalModeToggle={onRemovalModeToggle}
         />
-        {state.activePost ? (
-          <button type="button" className="filter-sidebar-refresh" onClick={feed.closePost}>
-            <ArrowLeft size={16} />
-            <span>Feed</span>
-          </button>
-        ) : null}
-        <button
-          type="button"
-          className="filter-sidebar-refresh"
-          onClick={feed.refresh}
-          disabled={state.isLoading}
-        >
-          <RefreshCw size={16} className={state.isLoading ? 'spin' : ''} />
-          <span>Refresh</span>
-        </button>
-        <div className="queue-filters" role="tablist" aria-label="Feed sort">
-          {SORTS.map((s) => (
-            <button
-              key={s}
-              type="button"
-              role="tab"
-              aria-selected={state.sort === s}
-              className={state.sort === s ? 'active' : ''}
-              onClick={() => feed.setSort(s)}
-            >
-              {s}
+        <div className="filter-sidebar-actions">
+          {state.activePost ? (
+            <button type="button" className="filter-sidebar-refresh" onClick={feed.closePost}>
+              <ArrowLeft size={16} />
+              <span>Feed</span>
             </button>
-          ))}
+          ) : null}
+          <button
+            type="button"
+            className="filter-sidebar-refresh"
+            onClick={feed.refresh}
+            disabled={state.isLoading}
+          >
+            <RefreshCw size={16} className={state.isLoading ? 'spin' : ''} />
+            <span>Refresh</span>
+          </button>
+          <div className="queue-filters" role="tablist" aria-label="Feed sort">
+            {SORTS.map((s) => (
+              <button
+                key={s}
+                type="button"
+                role="tab"
+                aria-selected={state.sort === s}
+                className={state.sort === s ? 'active' : ''}
+                onClick={() => feed.setSort(s)}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
         </div>
       </aside>
 

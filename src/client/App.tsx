@@ -47,8 +47,8 @@ export default function App() {
   const [removeAsSpam, setRemoveAsSpam] = useState(false);
   const [subredditRules, setSubredditRules] = useState<SubredditRule[]>([]);
   const [rulesLoading, setRulesLoading] = useState(true);
-  const [rulesExpanded, setRulesExpanded] = useState(true);
-  const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
+  const [rulesPanelExpanded, setRulesPanelExpanded] = useState(true);
+  const [expandedRuleId, setExpandedRuleId] = useState<string | null>(null);
   const [activeRule, setActiveRule] = useState<SubredditRule | null>(null);
 
   const addToast = useCallback((message: string, kind: Toast['kind'] = 'info', persistent = false) => {
@@ -236,19 +236,18 @@ export default function App() {
   }, [subreddit]);
 
 
-  const handleRuleClick = useCallback((rule: SubredditRule) => {
+  const handleRuleExpand = useCallback((ruleId: string) => {
+    setExpandedRuleId((current) => (current === ruleId ? null : ruleId));
+  }, []);
+
+  const handleRemovalModeToggle = useCallback((rule: SubredditRule) => {
     if (activeRule?.id === rule.id) {
       setActiveRule(null);
-      setSelectedRuleId(null);
       return;
     }
-    if (selectedRuleId === rule.id) {
-      setActiveRule(rule);
-      return;
-    }
-    setSelectedRuleId(rule.id);
-    setActiveRule(null);
-  }, [activeRule, selectedRuleId]);
+    setActiveRule(rule);
+    setExpandedRuleId(rule.id);
+  }, [activeRule]);
 
   const handleItemToggle = useCallback(
     (id: string) => {
@@ -492,11 +491,12 @@ export default function App() {
               onRefresh={queue.refresh}
               rules={subredditRules}
               rulesLoading={rulesLoading}
-              rulesExpanded={rulesExpanded}
-              onRulesExpandedChange={setRulesExpanded}
-              selectedRuleId={selectedRuleId}
+              rulesPanelExpanded={rulesPanelExpanded}
+              onRulesPanelExpandedChange={setRulesPanelExpanded}
+              expandedRuleId={expandedRuleId}
               activeRuleId={activeRule?.id ?? null}
-              onRuleClick={handleRuleClick}
+              onRuleExpand={handleRuleExpand}
+              onRemovalModeToggle={handleRemovalModeToggle}
             />
 
             <section className="queue-list">
@@ -527,12 +527,8 @@ export default function App() {
           </div>
 
           {activeRule ? (
-            <div className="rule-mode-banner active">
-              Remove mode: <strong>{activeRule.shortName}</strong> — click a row checkbox to remove with this rule.
-            </div>
-          ) : selectedRuleId ? (
-            <div className="rule-mode-banner pending">
-              <strong>{subredditRules.find((r) => r.id === selectedRuleId)?.shortName}</strong> selected — click the rule again to enable remove mode.
+            <div className="rule-mode-banner">
+              <strong>{activeRule.shortName}</strong> removal mode — tap a row checkbox to remove.
             </div>
           ) : null}
 
@@ -548,20 +544,17 @@ export default function App() {
             onMenuOpenChange={setOpenMenuId}
             rules={subredditRules}
             rulesLoading={rulesLoading}
-            rulesExpanded={rulesExpanded}
-            onRulesExpandedChange={setRulesExpanded}
-            selectedRuleId={selectedRuleId}
+            rulesPanelExpanded={rulesPanelExpanded}
+            onRulesPanelExpandedChange={setRulesPanelExpanded}
+            expandedRuleId={expandedRuleId}
             activeRuleId={activeRule?.id ?? null}
-            onRuleClick={handleRuleClick}
+            onRuleExpand={handleRuleExpand}
+              onRemovalModeToggle={handleRemovalModeToggle}
             onToggle={handleItemToggle}
           />
           {activeRule ? (
-            <div className="rule-mode-banner active">
-              Remove mode: <strong>{activeRule.shortName}</strong> — click a row checkbox to remove with this rule.
-            </div>
-          ) : selectedRuleId ? (
-            <div className="rule-mode-banner pending">
-              <strong>{subredditRules.find((r) => r.id === selectedRuleId)?.shortName}</strong> selected — click the rule again to enable remove mode.
+            <div className="rule-mode-banner">
+              <strong>{activeRule.shortName}</strong> removal mode — tap a row checkbox to remove.
             </div>
           ) : null}
           {selectedCount > 0 ? <SelectionBar selectedCount={selectedCount} focusedCount={focused ? 1 : 0} /> : null}

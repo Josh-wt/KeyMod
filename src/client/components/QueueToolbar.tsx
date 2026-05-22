@@ -17,11 +17,12 @@ type Props = {
   onRefresh: () => void;
   rules: SubredditRule[];
   rulesLoading: boolean;
-  rulesExpanded: boolean;
-  onRulesExpandedChange: (expanded: boolean) => void;
-  selectedRuleId: string | null;
+  rulesPanelExpanded: boolean;
+  onRulesPanelExpandedChange: (expanded: boolean) => void;
+  expandedRuleId: string | null;
   activeRuleId: string | null;
-  onRuleClick: (rule: SubredditRule) => void;
+  onRuleExpand: (ruleId: string) => void;
+  onRemovalModeToggle: (rule: SubredditRule) => void;
 };
 
 const filters: Array<{ id: QueueFilter; label: string; count?: (stats: Stats) => number }> = [
@@ -39,42 +40,46 @@ export function QueueToolbar({
   onRefresh,
   rules,
   rulesLoading,
-  rulesExpanded,
-  onRulesExpandedChange,
-  selectedRuleId,
+  rulesPanelExpanded,
+  onRulesPanelExpandedChange,
+  expandedRuleId,
   activeRuleId,
-  onRuleClick,
+  onRuleExpand,
+  onRemovalModeToggle,
 }: Props) {
   return (
     <aside className="filter-sidebar" aria-label="Queue controls">
       <RulesSidebar
         rules={rules}
         isLoading={rulesLoading}
-        expanded={rulesExpanded}
-        onExpandedChange={onRulesExpandedChange}
-        selectedRuleId={selectedRuleId}
+        panelExpanded={rulesPanelExpanded}
+        onPanelExpandedChange={onRulesPanelExpandedChange}
+        expandedRuleId={expandedRuleId}
         activeRuleId={activeRuleId}
-        onRuleClick={onRuleClick}
+        onRuleExpand={onRuleExpand}
+        onRemovalModeToggle={onRemovalModeToggle}
       />
-      <button type="button" className="filter-sidebar-refresh" onClick={onRefresh} disabled={isLoading}>
-        <RefreshCw size={16} className={isLoading ? 'spin' : ''} />
-        <span>Refresh</span>
-      </button>
-      <div className="queue-filters" role="tablist" aria-label="Queue filters">
-        {filters.map((entry) => (
-          <button
-            key={entry.id}
-            type="button"
-            role="tab"
-            aria-selected={filter === entry.id}
-            className={filter === entry.id ? 'active' : ''}
-            data-filter={entry.id}
-            onClick={() => onFilterChange(entry.id)}
-          >
-            {entry.label}
-            <span>{entry.count?.(stats) ?? 0}</span>
-          </button>
-        ))}
+      <div className="filter-sidebar-actions">
+        <button type="button" className="filter-sidebar-refresh" onClick={onRefresh} disabled={isLoading}>
+          <RefreshCw size={16} className={isLoading ? 'spin' : ''} />
+          <span>Refresh</span>
+        </button>
+        <div className="queue-filters" role="tablist" aria-label="Queue filters">
+          {filters.map((entry) => (
+            <button
+              key={entry.id}
+              type="button"
+              role="tab"
+              aria-selected={filter === entry.id}
+              className={filter === entry.id ? 'active' : ''}
+              data-filter={entry.id}
+              onClick={() => onFilterChange(entry.id)}
+            >
+              {entry.label}
+              <span>{entry.count?.(stats) ?? 0}</span>
+            </button>
+          ))}
+        </div>
       </div>
     </aside>
   );

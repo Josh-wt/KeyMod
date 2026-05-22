@@ -4,62 +4,100 @@ import type { SubredditRule } from '../../shared';
 type Props = {
   rules: SubredditRule[];
   isLoading: boolean;
-  expanded: boolean;
-  onExpandedChange: (expanded: boolean) => void;
-  selectedRuleId: string | null;
+  panelExpanded: boolean;
+  onPanelExpandedChange: (expanded: boolean) => void;
+  expandedRuleId: string | null;
   activeRuleId: string | null;
-  onRuleClick: (rule: SubredditRule) => void;
+  onRuleExpand: (ruleId: string) => void;
+  onRemovalModeToggle: (rule: SubredditRule) => void;
 };
+
+function ruleKindLabel(kind: SubredditRule['kind']) {
+  if (kind === 'link') return 'Posts';
+  if (kind === 'comment') return 'Comments';
+  return 'Posts & comments';
+}
 
 export function RulesSidebar({
   rules,
   isLoading,
-  expanded,
-  onExpandedChange,
-  selectedRuleId,
+  panelExpanded,
+  onPanelExpandedChange,
+  expandedRuleId,
   activeRuleId,
-  onRuleClick,
+  onRuleExpand,
+  onRemovalModeToggle,
 }: Props) {
   return (
-    <section className={`rules-sidebar${expanded ? ' expanded' : ''}`} aria-label="Subreddit rules">
+    <section className={`rules-sidebar${panelExpanded ? ' panel-expanded' : ''}`} aria-label="Subreddit rules">
       <button
         type="button"
         className="rules-sidebar-toggle"
-        aria-expanded={expanded}
-        onClick={() => onExpandedChange(!expanded)}
+        aria-expanded={panelExpanded}
+        onClick={() => onPanelExpandedChange(!panelExpanded)}
       >
-        <Scale size={14} />
+        <Scale size={14} aria-hidden="true" />
         <span>Rules</span>
-        {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        {panelExpanded ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />}
       </button>
 
-      {expanded ? (
+      {panelExpanded ? (
         <div className="rules-sidebar-body">
           {isLoading ? <p className="rules-sidebar-status">Loading rules…</p> : null}
           {!isLoading && !rules.length ? <p className="rules-sidebar-status">No subreddit rules found.</p> : null}
-          {!isLoading
-            ? rules.map((rule) => {
-                const selected = selectedRuleId === rule.id;
-                const active = activeRuleId === rule.id;
+          {!isLoading && rules.length ? (
+            <ul className="rules-sidebar-list">
+              {rules.map((rule) => {
+                const open = expandedRuleId === rule.id;
+                const removalOn = activeRuleId === rule.id;
                 return (
-                  <button
+                  <li
                     key={rule.id}
-                    type="button"
-                    className={`rules-sidebar-rule${selected ? ' selected' : ''}${active ? ' active' : ''}`}
-                    title={rule.description || rule.violationReason}
-                    aria-pressed={active}
-                    onClick={() => onRuleClick(rule)}
+                    className={`rules-sidebar-item${open ? ' open' : ''}${removalOn ? ' removal-on' : ''}`}
                   >
-                    <span className="rules-sidebar-rule-name">{rule.shortName}</span>
-                    {active ? (
-                      <span className="rules-sidebar-rule-mode">Remove mode</span>
-                    ) : selected ? (
-                      <span className="rules-sidebar-rule-hint">Click again</span>
+                    <button
+                      type="button"
+                      className="rules-sidebar-rule-header"
+                      aria-expanded={open}
+                      onClick={() => onRuleExpand(rule.id)}
+                    >
+                      <span className="rules-sidebar-rule-name">{rule.shortName}</span>
+                      {removalOn ? <span className="rules-sidebar-rule-badge">On</span> : null}
+                      <ChevronDown size={14} className="rules-sidebar-rule-chevron" aria-hidden="true" />
+                    </button>
+                    {open ? (
+                      <div className="rules-sidebar-rule-details">
+                        {rule.description ? <p className="rules-sidebar-rule-description">{rule.description}</p> : null}
+                        <dl className="rules-sidebar-rule-meta">
+                          <div>
+                            <dt>Applies to</dt>
+                            <dd>{ruleKindLabel(rule.kind)}</dd>
+                          </div>
+                          {rule.violationReason && rule.violationReason !== rule.shortName ? (
+                            <div>
+                              <dt>Report label</dt>
+                              <dd>{rule.violationReason}</dd>
+                            </div>
+                          ) : null}
+                        </dl>
+                        <button
+                          type="button"
+                          className={`rules-removal-toggle${removalOn ? ' on' : ''}`}
+                          aria-pressed={removalOn}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onRemovalModeToggle(rule);
+                          }}
+                        >
+                          {removalOn ? 'Removal mode: On' : 'Turn on removal mode'}
+                        </button>
+                      </div>
                     ) : null}
-                  </button>
+                  </li>
                 );
-              })
-            : null}
+              })}
+            </ul>
+          ) : null}
         </div>
       ) : null}
     </section>
