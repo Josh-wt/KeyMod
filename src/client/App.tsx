@@ -474,7 +474,7 @@ export default function App() {
           <button onClick={() => setShowHelp(true)} aria-label="Open help">
             ?
           </button>
-          <button onClick={() => window.close()} aria-label="Close">
+          <button type="button" className="topbar-close" onClick={() => window.close()} aria-label="Close">
             <X size={16} />
           </button>
         </nav>

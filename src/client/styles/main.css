@@ -1962,27 +1962,53 @@ kbd {
 
 @media (max-width: 720px) {
   .topbar-minimal {
-    padding: 0 12px;
-    gap: 8px;
+    min-height: 36px;
+    padding: 0 10px;
+    gap: 6px;
   }
 
   .feed-context {
     overflow: hidden;
-    max-width: 42vw;
-    font-size: 12px;
+    max-width: 36vw;
+    font-size: 11px;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
+  .view-tabs {
+    gap: 2px;
+  }
+
   .view-tabs button {
-    padding: 6px 10px;
-    font-size: 12px;
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+
+  .topbar-actions,
+  .warning-banner {
+    display: none;
   }
 
   .topbar button,
   .panel-close {
-    min-width: 40px;
-    height: 40px;
+    min-width: 28px;
+    height: 28px;
+  }
+
+  .selection-bar > span {
+    display: none;
+  }
+
+  .selection-bar {
+    min-height: 36px;
+    gap: 0;
+  }
+
+  .command-input kbd,
+  .feature-panel kbd,
+  .reason-list kbd,
+  .help-overlay {
+    display: none;
   }
 
   .queue-workspace {
@@ -2027,16 +2053,16 @@ kbd {
     -webkit-overflow-scrolling: touch;
   }
 
-  .topbar-actions {
-    opacity: 1;
-  }
-
   .filter-sidebar {
-    gap: 8px;
+    gap: 6px;
     max-height: none;
-    padding: 10px 12px;
+    padding: 8px 10px;
     border-right: none;
     border-bottom: 1px solid var(--line-soft);
+  }
+
+  .filter-sidebar-refresh {
+    display: none;
   }
 
   .rules-sidebar-body {
@@ -2047,7 +2073,14 @@ kbd {
   .rules-sidebar-toggle,
   .rules-sidebar-rule-header,
   .rules-removal-toggle {
-    min-height: 44px;
+    min-height: 36px;
+    font-size: 12px;
+  }
+
+  .rules-sidebar-toggle svg,
+  .rules-sidebar-rule-chevron {
+    width: 12px;
+    height: 12px;
   }
 
   .rules-sidebar-rule-details {
@@ -2075,12 +2108,9 @@ kbd {
   .queue-filters button {
     flex: 0 0 auto;
     min-width: max-content;
-    min-height: 40px;
-    padding: 8px 12px;
-  }
-
-  .filter-sidebar-refresh {
-    min-height: 44px;
+    min-height: 32px;
+    padding: 6px 10px;
+    font-size: 12px;
   }
 
   .queue-list {

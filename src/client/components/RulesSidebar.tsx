@@ -29,7 +29,7 @@ export function RulesSidebar({
   onRemovalModeToggle,
 }: Props) {
   return (
-    <section className={`rules-sidebar${panelExpanded ? ' panel-expanded' : ''}`} aria-label="Subreddit rules">
+    <section className={`rules-sidebar${panelExpanded ? ' panel-expanded' : ''}`} aria-label="Removal reasons">
       <button
         type="button"
         className="rules-sidebar-toggle"
