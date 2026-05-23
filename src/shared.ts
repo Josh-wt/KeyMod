@@ -87,6 +87,15 @@ export type RemovalReason = {
   flairId: string;
 };
 
+export type SubredditRule = {
+  id: string;
+  shortName: string;
+  description: string;
+  kind: 'all' | 'link' | 'comment';
+  violationReason: string;
+  priority: number;
+};
+
 export type BanReason = {
   index: number;
   reason: string;

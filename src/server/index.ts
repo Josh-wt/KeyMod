@@ -13,6 +13,7 @@ import type {
   NotificationCounts,
   ParentPostContext,
   QueueItem,
+  SubredditRule,
   UserActivityItem,
   UserInfo,
   UserModLogEntry,

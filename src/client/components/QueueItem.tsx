@@ -1,6 +1,7 @@
-import { memo, type MouseEvent } from 'react';
+import { memo, type MouseEvent, type PointerEvent } from 'react';
 import { Check } from 'lucide-react';
 import type { QueueItem as QueueItemType } from '../../shared';
+import { isMousePointer } from '../pointer';
 import type { ModItemHandlers } from '../modActions';
 import { reportCount } from '../queueReports';
 import { FeedComment } from './FeedComment';

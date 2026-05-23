@@ -7,6 +7,7 @@ import type {
   ModLogMatrix,
   NotificationCounts,
   QueueItem,
+  SubredditRule,
   UserInfo,
 } from '../shared';
 import type { ModActionResult } from './modActions';
@@ -36,6 +37,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   settings: () => request<AppSettings>('/api/settings'),
+  subredditRules: () => request<{ rules: SubredditRule[] }>('/api/subreddit-rules'),
   queue: (after?: string | null) =>
     request<{ items: QueueItem[]; after: string | null }>(`/api/queue${after ? `?after=${encodeURIComponent(after)}` : ''}`),
   feed: (sort: FeedSort = 'hot', after?: string | null) => {
