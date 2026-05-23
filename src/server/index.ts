@@ -302,6 +302,7 @@ async function fetchSidebarRules(): Promise<SubredditRule[]> {
   }
 }
 
+
 async function enrichQueueItems(items: QueueItem[], fallbackSubreddit: string): Promise<QueueItem[]> {
   const subredditNames = [...new Set(items.map((item) => item.subreddit).filter(Boolean))];
   await Promise.all(subredditNames.map((name) => getSubredditIcon(name)));
@@ -727,6 +728,8 @@ app.use('/api/*', async (c, next) => {
 });
 
 app.get('/api/settings', async (c) => c.json(await resolveSettings(settings)));
+
+app.get('/api/subreddit-rules', async (c) => c.json({ rules: await fetchSidebarRules() }));
 
 app.get('/api/feed', async (c) => {
   const subredditName = getSubredditName();
