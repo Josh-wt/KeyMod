@@ -43,8 +43,8 @@ export function RulesSidebar({
 
       {panelExpanded ? (
         <div className="rules-sidebar-body">
-          {isLoading ? <p className="rules-sidebar-status">Loading rules…</p> : null}
-          {!isLoading && !rules.length ? <p className="rules-sidebar-status">No subreddit rules found.</p> : null}
+          {isLoading ? <p className="rules-sidebar-status">Loading removal reasons…</p> : null}
+          {!isLoading && !rules.length ? <p className="rules-sidebar-status">No removal reasons found.</p> : null}
           {!isLoading && rules.length ? (
             <ul className="rules-sidebar-list">
               {rules.map((rule) => {

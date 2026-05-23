@@ -241,6 +241,67 @@ async function getSubredditIcon(subredditName: string): Promise<string> {
   }
 }
 
+function toSubredditRule(
+  subredditName: string,
+  entry: {
+    id: string;
+    shortName: string;
+    description: string;
+    kind: SubredditRule['kind'];
+    violationReason: string;
+    priority: number;
+  },
+): SubredditRule {
+  const shortName = entry.shortName.trim() || `Reason ${entry.priority + 1}`;
+  return {
+    id: entry.id || `${subredditName}:${entry.priority}:${shortName}`,
+    shortName,
+    description: entry.description.trim(),
+    kind: entry.kind,
+    violationReason: entry.violationReason.trim() || shortName,
+    priority: entry.priority,
+  };
+}
+
+async function fetchSidebarRules(): Promise<SubredditRule[]> {
+  const subredditName = getSubredditName();
+
+  try {
+    const removalReasons = await reddit.getSubredditRemovalReasons(subredditName);
+    const configured = removalReasons
+      .map((reason, index) =>
+        toSubredditRule(subredditName, {
+          id: reason.id,
+          shortName: reason.title,
+          description: reason.message,
+          kind: 'all',
+          violationReason: reason.title,
+          priority: index,
+        }),
+      )
+      .filter((rule) => rule.shortName || rule.description);
+    if (configured.length) return configured;
+  } catch {
+    // Fall back to subreddit rules when removal reasons are unavailable.
+  }
+
+  try {
+    const rules = await reddit.getRules(subredditName);
+    return rules.map((rule, index) =>
+      toSubredditRule(subredditName, {
+        id: `${subredditName}:${rule.priority}:${rule.shortName}`,
+        shortName: rule.shortName,
+        description: rule.description,
+        kind: rule.kind,
+        violationReason: rule.violationReason,
+        priority: rule.priority ?? index,
+      }),
+    );
+  } catch {
+    return [];
+  }
+}
+
 async function enrichQueueItems(items: QueueItem[], fallbackSubreddit: string): Promise<QueueItem[]> {
   const subredditNames = [...new Set(items.map((item) => item.subreddit).filter(Boolean))];
   await Promise.all(subredditNames.map((name) => getSubredditIcon(name)));
