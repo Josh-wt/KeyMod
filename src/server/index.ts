@@ -363,6 +363,39 @@ async function applyRemovalReason(itemIds: string[], reasonId: string, modNote: 
 }
 
 
+async function fetchCommentChain(
+  postId: string,
+  targetCommentId: string,
+  fallbackSubreddit: string,
+): Promise<QueueItem[]> {
+  try {
+    const comments = await commentTreeItems(
+      reddit.getComments({ postId: postId as never, pageSize: 200, depth: 10 }),
+    );
+    const normalized = comments.map((c) => ({
+      ...normalizeThing(c, fallbackSubreddit),
+      subredditIcon: subredditIconCache.get(fallbackSubreddit.toLowerCase()) || undefined,
+    }));
+
+    const byId = new Map(normalized.map((c) => [c.id, c]));
+    const target = byId.get(targetCommentId);
+    if (!target) return [];
+
+    const chain: QueueItem[] = [];
+    const seen = new Set<string>();
+
+    for (const c of normalized) {
+      if (seen.has(c.id)) continue;
+      seen.add(c.id);
+      chain.push(c);
+    }
+
+    return chain.filter((c) => c.id !== targetCommentId).slice(0, 30);
+  } catch {
+    return [];
+  }
+}
+
 async function enrichQueueItems(items: QueueItem[], fallbackSubreddit: string): Promise<QueueItem[]> {
   const subredditNames = [...new Set(items.map((item) => item.subreddit).filter(Boolean))];
   await Promise.all(subredditNames.map((name) => getSubredditIcon(name)));
@@ -371,6 +404,7 @@ async function enrichQueueItems(items: QueueItem[], fallbackSubreddit: string): 
     ...new Set(items.filter((item) => item.type === 'comment' && item.postId).map((item) => item.postId as string)),
   ];
   const parentPosts = new Map<string, ParentPostContext>();
+  const commentChains = new Map<string, QueueItem[]>();
 
   await Promise.all(
     commentPostIds.map(async (postId) => {
@@ -383,6 +417,15 @@ async function enrichQueueItems(items: QueueItem[], fallbackSubreddit: string): 
       } catch {
         // Parent post may be deleted; fall back to inline metadata.
       }
+    }),
+  );
+
+  const commentItems = items.filter((item) => item.type === 'comment' && item.postId);
+  await Promise.all(
+    commentItems.map(async (item) => {
+      if (!item.postId) return;
+      const chain = await fetchCommentChain(item.postId, item.id, item.subreddit || fallbackSubreddit);
+      if (chain.length) commentChains.set(item.id, chain);
     }),
   );
 
@@ -405,6 +448,7 @@ async function enrichQueueItems(items: QueueItem[], fallbackSubreddit: string): 
       ...item,
       subredditIcon,
       parentPost,
+      contextComments: commentChains.get(item.id),
     };
   });
 }

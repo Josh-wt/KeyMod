@@ -1098,9 +1098,20 @@ kbd {
 }
 
 .removal-reason-index {
-  font-family: "SFMono-Regular", Consolas, monospace;
+  display: flex;
+  align-items: center;
+}
+
+.removal-reason-index kbd {
+  padding: 2px 6px;
+  border: 1px solid #555;
+  border-radius: 3px;
   color: #ff8b60;
-  font-size: 12px;
+  background: #1a1a1a;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .removal-reason-text {
@@ -1801,7 +1812,154 @@ kbd {
   color: #ffb0b0;
 }
 
+.rule-mode-banner kbd {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border: 1px solid rgb(200 72 72 / 40%);
+  border-radius: 3px;
+  color: #ffb0b0;
+  background: rgb(200 72 72 / 15%);
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 11px;
+  font-weight: 600;
+}
 
+/* --- Expanded comment chain view (mod queue) --- */
+
+.queue-row-comment-expanded {
+  border-color: var(--line-soft);
+  border-radius: 10px;
+  margin-top: 12px;
+  background: var(--surface-0);
+}
+
+.queue-row-comment-expanded.focused {
+  background: var(--surface-1);
+  box-shadow: inset 2px 0 0 rgb(215 218 220 / 55%);
+}
+
+.queue-row-comment-expanded.selected {
+  background: var(--surface-1);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.comment-expanded-view {
+  display: grid;
+  gap: 0;
+  padding: 12px 16px 14px;
+}
+
+.comment-expanded-parent {
+  margin-bottom: 12px;
+}
+
+.comment-expanded-parent .feed-post-embedded {
+  border-color: var(--line);
+}
+
+.comment-chain-section {
+  display: grid;
+  gap: 6px;
+}
+
+.comment-chain-label {
+  padding: 4px 0;
+  color: var(--text-subtle);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.comment-chain-list {
+  display: grid;
+  gap: 4px;
+  border-left: 2px solid var(--thread-line);
+  padding-left: 14px;
+}
+
+.context-comment-card {
+  position: relative;
+}
+
+.context-comment-card .feed-comment-card {
+  border-color: var(--line-soft);
+  background: var(--surface-0);
+}
+
+.context-comment-reported {
+  position: relative;
+}
+
+.context-comment-reported .feed-comment-card {
+  border-color: rgb(200 72 72 / 45%);
+  background: rgb(200 72 72 / 6%);
+  box-shadow: inset 3px 0 0 var(--report-dot);
+}
+
+.context-comment-reported .queue-report-tags {
+  position: relative;
+  top: auto;
+  left: auto;
+  transform: none;
+  justify-content: flex-start;
+  margin-bottom: 6px;
+  pointer-events: auto;
+}
+
+/* --- Highlighted comment (the reported one) --- */
+
+.feed-comment-highlighted {
+  border-color: rgb(200 72 72 / 50%) !important;
+  background: rgb(200 72 72 / 8%) !important;
+  box-shadow: inset 3px 0 0 var(--report-dot), 0 0 12px rgb(200 72 72 / 12%);
+}
+
+/* --- Undo toast enhanced layout --- */
+
+.undo-toast-info {
+  display: grid;
+  gap: 3px;
+}
+
+.undo-toast-count {
+  font-weight: 600;
+}
+
+.undo-toast-reason {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #a8a8a8;
+}
+
+.undo-reason-key {
+  padding: 1px 5px;
+  border: 1px solid #555;
+  border-radius: 3px;
+  color: #ff8b60;
+  background: #1a1a1a;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.undo-reason-label {
+  color: #ffb08a;
+  font-weight: 500;
+}
+
+/* --- Next comment button styling --- */
+
+.next-comment-button {
+  border-color: rgb(79 188 255 / 35%) !important;
+  color: #4fbcff !important;
+}
+
+.next-comment-button:hover {
+  background: rgb(79 188 255 / 10%) !important;
+}
 
 @keyframes spin {
   to {
@@ -2182,6 +2340,14 @@ kbd {
 
   .comment-queue-stack-detached {
     padding-left: 12px;
+  }
+
+  .comment-expanded-view {
+    padding: 10px 12px 12px;
+  }
+
+  .comment-chain-list {
+    padding-left: 10px;
   }
 
   .feed-post-header {

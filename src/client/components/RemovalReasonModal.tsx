@@ -43,7 +43,9 @@ export function RemovalReasonModal({ title, reasons, asSpam = false, onCancel, o
                 className={selected === reason.index ? 'active' : ''}
                 onClick={() => setSelected(reason.index)}
               >
-                <span className="removal-reason-index">[{reason.index}]</span>
+                <span className="removal-reason-index">
+                  <kbd>Ctrl+{reason.index}</kbd>
+                </span>
                 <span className="removal-reason-text">{reason.text}</span>
               </button>
             ))

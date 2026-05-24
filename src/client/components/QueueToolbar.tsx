@@ -1,4 +1,4 @@
-import { RefreshCw } from 'lucide-react';
+import { MessageCircle, RefreshCw } from 'lucide-react';
 import type { QueueFilter, SubredditRule } from '../../shared';
 import { RulesSidebar } from './RulesSidebar';
 
@@ -15,6 +15,7 @@ type Props = {
   isLoading: boolean;
   onFilterChange: (filter: QueueFilter) => void;
   onRefresh: () => void;
+  onNextComment?: () => void;
   rules: SubredditRule[];
   rulesLoading: boolean;
   rulesPanelExpanded: boolean;
@@ -38,6 +39,7 @@ export function QueueToolbar({
   isLoading,
   onFilterChange,
   onRefresh,
+  onNextComment,
   rules,
   rulesLoading,
   rulesPanelExpanded,
@@ -64,6 +66,12 @@ export function QueueToolbar({
           <RefreshCw size={16} className={isLoading ? 'spin' : ''} />
           <span>Refresh</span>
         </button>
+        {stats.comments > 0 && onNextComment ? (
+          <button type="button" className="filter-sidebar-refresh next-comment-button" onClick={onNextComment}>
+            <MessageCircle size={16} />
+            <span>Next comment</span>
+          </button>
+        ) : null}
         <div className="queue-filters" role="tablist" aria-label="Queue filters">
           {filters.map((entry) => (
             <button

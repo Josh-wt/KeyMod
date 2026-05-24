@@ -42,7 +42,9 @@ export default function App() {
   const [focusedUserInfo, setFocusedUserInfo] = useState<UserInfo | null>(null);
   const [lastRemovalCount, setLastRemovalCount] = useState(0);
   const [lastRemovalReason, setLastRemovalReason] = useState('');
+  const [lastRemovalReasonIndex, setLastRemovalReasonIndex] = useState(0);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [openContextMenuId, setOpenContextMenuId] = useState<string | null>(null);
   const [modalItem, setModalItem] = useState<QueueItem | null>(null);
   const [removeAsSpam, setRemoveAsSpam] = useState(false);
   const [subredditRules, setSubredditRules] = useState<SubredditRule[]>([]);
@@ -78,8 +80,12 @@ export default function App() {
       const removedItems = list.visibleItems.filter((item) => ids.includes(item.id));
       const pendingBatchId = crypto.randomUUID();
 
+      const reasonLabel = asSpam
+        ? 'Spam'
+        : (removalReason?.title ?? activeRule?.shortName ?? subredditRules.find((r) => r.priority === reasonIndex - 1)?.shortName ?? `Rule ${reasonIndex}`);
       setLastRemovalCount(ids.length);
-      setLastRemovalReason(asSpam ? 'Spam' : (activeRule?.shortName ?? `Rule ${reasonIndex}`));
+      setLastRemovalReason(reasonLabel);
+      setLastRemovalReasonIndex(reasonIndex);
       list.markRemoved(ids, pendingBatchId);
 
       void api
@@ -96,7 +102,7 @@ export default function App() {
           addToast(error instanceof Error ? error.message : 'Remove failed', 'error');
         });
     },
-    [activeRule, addToast, feed, isQueueView, queue],
+    [activeRule, addToast, feed, isQueueView, queue, subredditRules],
   );
 
   const remove = useCallback(
@@ -273,6 +279,33 @@ export default function App() {
 
   const focused = isQueueView ? queue.focused : feed.focused;
   const undoCountdown = isQueueView ? queue.state.undoCountdown : feed.state.undoCountdown;
+
+  const scrollToNextComment = useCallback(() => {
+    const items = queue.visibleItems;
+    const currentIndex = queue.state.focusedIndex;
+    let nextIndex = -1;
+
+    for (let i = currentIndex + 1; i < items.length; i++) {
+      if (items[i].type === 'comment') {
+        nextIndex = i;
+        break;
+      }
+    }
+    if (nextIndex < 0) {
+      for (let i = 0; i < currentIndex; i++) {
+        if (items[i].type === 'comment') {
+          nextIndex = i;
+          break;
+        }
+      }
+    }
+
+    if (nextIndex >= 0) {
+      queue.focusIndex(nextIndex);
+      const row = document.querySelector(`.queue-row[data-queue-id="${items[nextIndex].id}"]`);
+      row?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [queue]);
 
   const modHandlers = useMemo(
     () =>
@@ -498,6 +531,7 @@ export default function App() {
               isLoading={queue.state.isLoading}
               onFilterChange={queue.setFilter}
               onRefresh={queue.refresh}
+              onNextComment={scrollToNextComment}
               rules={subredditRules}
               rulesLoading={rulesLoading}
               rulesPanelExpanded={rulesPanelExpanded}
@@ -526,6 +560,9 @@ export default function App() {
                   onDragStart={queue.startDrag}
                   onDragUpdate={queue.updateDrag}
                   onFocusLeave={queue.clearHover}
+                  isQueueView
+                  openContextMenuId={openContextMenuId}
+                  onContextMenuOpenChange={setOpenContextMenuId}
                 />
               ))}
               {queue.state.isLoading ? <div className="empty-state">Loading queue</div> : null}
@@ -537,7 +574,8 @@ export default function App() {
 
           {activeRule ? (
             <div className="rule-mode-banner">
-              <strong>{activeRule.shortName}</strong> removal mode — tap a row checkbox to remove.
+              <strong>{activeRule.shortName}</strong> removal mode — tap a row checkbox to remove with this reason.
+              {' '}<kbd>Ctrl+{(activeRule.priority ?? 0) + 1}</kbd>
             </div>
           ) : null}
 
@@ -563,7 +601,8 @@ export default function App() {
           />
           {activeRule ? (
             <div className="rule-mode-banner">
-              <strong>{activeRule.shortName}</strong> removal mode — tap a row checkbox to remove.
+              <strong>{activeRule.shortName}</strong> removal mode — tap a row checkbox to remove with this reason.
+              {' '}<kbd>Ctrl+{(activeRule.priority ?? 0) + 1}</kbd>
             </div>
           ) : null}
           {selectedCount > 0 ? <SelectionBar selectedCount={selectedCount} focusedCount={focused ? 1 : 0} /> : null}
@@ -582,6 +621,7 @@ export default function App() {
         <UndoToast
           count={lastRemovalCount}
           reason={lastRemovalReason}
+          reasonIndex={lastRemovalReasonIndex || undefined}
           countdown={undoCountdown}
           onUndo={undo}
           onDone={() => {

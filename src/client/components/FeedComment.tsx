@@ -10,13 +10,14 @@ import { QueueReportTags } from './QueueReportTags';
 
 type Props = {
   item: QueueItem;
+  highlighted?: boolean;
   modHandlers?: ModItemHandlers;
   menuOpen?: boolean;
   onMenuOpenChange?: (open: boolean) => void;
   onStop?: (event: MouseEvent) => void;
 };
 
-export function FeedComment({ item, modHandlers, menuOpen = false, onMenuOpenChange, onStop }: Props) {
+export function FeedComment({ item, highlighted = false, modHandlers, menuOpen = false, onMenuOpenChange, onStop }: Props) {
   const hostRef = useRef<HTMLElement>(null);
   const showModActions = Boolean(modHandlers && onMenuOpenChange);
   const hasReports = reportCount(item) > 0;
@@ -24,7 +25,7 @@ export function FeedComment({ item, modHandlers, menuOpen = false, onMenuOpenCha
   return (
     <article
       ref={hostRef}
-      className={`feed-comment-card${hasReports ? ' feed-comment-reported' : ''}${showModActions ? ' feed-comment-with-mod' : ''}`}
+      className={`feed-comment-card${hasReports ? ' feed-comment-reported' : ''}${showModActions ? ' feed-comment-with-mod' : ''}${highlighted ? ' feed-comment-highlighted' : ''}`}
     >
       {hasReports ? <QueueReportTags item={item} /> : null}
       <header className="feed-comment-header">
