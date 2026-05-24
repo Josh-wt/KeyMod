@@ -50,6 +50,8 @@ export type QueueItem = {
   crowdControlLevel?: CrowdControlLevel;
   distinguished?: boolean;
   ignoringReports?: boolean;
+  contextComments?: QueueItem[];
+  lastRemovalReasonLabel?: string;
 };
 
 export type QueueFilter = 'all' | 'posts' | 'comments' | 'reported';

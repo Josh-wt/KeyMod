@@ -715,8 +715,62 @@ function localApiPlugin(): Plugin {
           return;
         }
         if (url.startsWith('/queue')) {
+          const enriched = queueItems.filter((item) => !removedIds.has(item.id)).map(mergeItem).map((item) => {
+            if (item.type !== 'comment' || !item.postId) return item;
+            const contextComments: QueueItem[] = [
+              {
+                id: `t1_ctx_${item.id}_1`,
+                type: 'comment',
+                title: 'Context reply in the same thread',
+                body: 'I agree with the previous comment, this seems pretty clear-cut.',
+                author: 'thread_regular',
+                authorId: 'u_thread_regular',
+                subreddit: item.subreddit,
+                subredditIcon: item.subredditIcon,
+                postId: item.postId,
+                permalink: `${item.permalink}/ctx1`,
+                createdAt: item.createdAt - 15 * 60 * 1000,
+                reportReasons: [],
+                numReports: 0,
+                score: 5,
+              },
+              {
+                id: `t1_ctx_${item.id}_2`,
+                type: 'comment',
+                title: 'Earlier context comment',
+                body: 'Can we keep this civil? There are teenagers reading these comments.',
+                author: 'voice_of_reason',
+                authorId: 'u_voice_of_reason',
+                subreddit: item.subreddit,
+                subredditIcon: item.subredditIcon,
+                postId: item.postId,
+                permalink: `${item.permalink}/ctx2`,
+                createdAt: item.createdAt - 30 * 60 * 1000,
+                reportReasons: [],
+                numReports: 0,
+                score: 12,
+              },
+              {
+                id: `t1_ctx_${item.id}_3`,
+                type: 'comment',
+                title: 'Reply to the reported comment',
+                body: 'This reply came after the reported comment and may also need review.',
+                author: 'follow_up_user',
+                authorId: 'u_follow_up_user',
+                subreddit: item.subreddit,
+                subredditIcon: item.subredditIcon,
+                postId: item.postId,
+                permalink: `${item.permalink}/ctx3`,
+                createdAt: item.createdAt + 10 * 60 * 1000,
+                reportReasons: ['Incivility'],
+                numReports: 1,
+                score: -2,
+              },
+            ];
+            return { ...item, contextComments };
+          });
           json(res, {
-            items: queueItems.filter((item) => !removedIds.has(item.id)).map(mergeItem),
+            items: enriched,
             after: null,
           });
           return;
