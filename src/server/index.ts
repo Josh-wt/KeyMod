@@ -32,6 +32,12 @@ type PendingRemovalBatch = {
   removalReasonIndex: number;
 };
 
+type RedditRemovalReason = {
+  id: string;
+  title: string;
+  message: string;
+};
+
 const app = new Hono();
 
 function getSubredditName(): string {
@@ -245,6 +251,7 @@ function toSubredditRule(
   subredditName: string,
   entry: {
     id: string;
+    removalReasonId?: string;
     shortName: string;
     description: string;
     kind: SubredditRule['kind'];
@@ -255,6 +262,7 @@ function toSubredditRule(
   const shortName = entry.shortName.trim() || `Reason ${entry.priority + 1}`;
   return {
     id: entry.id || `${subredditName}:${entry.priority}:${shortName}`,
+    removalReasonId: entry.removalReasonId,
     shortName,
     description: entry.description.trim(),
     kind: entry.kind,
@@ -272,6 +280,7 @@ async function fetchSidebarRules(): Promise<SubredditRule[]> {
       .map((reason, index) =>
         toSubredditRule(subredditName, {
           id: reason.id,
+          removalReasonId: reason.id,
           shortName: reason.title,
           description: reason.message,
           kind: 'all',
@@ -300,6 +309,57 @@ async function fetchSidebarRules(): Promise<SubredditRule[]> {
   } catch {
     return [];
   }
+}
+
+function normalizeRemovalReasonLabel(value: string | undefined) {
+  return String(value ?? '').trim().toLowerCase();
+}
+
+async function resolveRedditRemovalReasonId(options: {
+  subredditName: string;
+  removalReasonIndex: number;
+  requestedId?: string;
+  requestedTitle?: string;
+  configuredReasons: Array<{ index: number; text: string }>;
+}): Promise<string> {
+  const reasons = (await reddit.getSubredditRemovalReasons(options.subredditName).catch(() => [])) as RedditRemovalReason[];
+  if (!reasons.length) return '';
+
+  const requestedId = options.requestedId?.trim();
+  if (requestedId && reasons.some((reason) => reason.id === requestedId)) return requestedId;
+
+  const requestedTitle = normalizeRemovalReasonLabel(options.requestedTitle);
+  if (requestedTitle) {
+    const match = reasons.find((reason) => normalizeRemovalReasonLabel(reason.title) === requestedTitle);
+    if (match) return match.id;
+  }
+
+  const configured = options.configuredReasons.find((reason) => reason.index === options.removalReasonIndex);
+  const configuredText = normalizeRemovalReasonLabel(configured?.text);
+  if (configuredText) {
+    const match = reasons.find((reason) => {
+      const title = normalizeRemovalReasonLabel(reason.title);
+      const message = normalizeRemovalReasonLabel(reason.message);
+      return title === configuredText || message === configuredText || title.includes(configuredText) || configuredText.includes(title);
+    });
+    if (match) return match.id;
+  }
+
+  return reasons[options.removalReasonIndex - 1]?.id ?? '';
+}
+
+function removalNoteText(reasonTitle: string | undefined, fallback: string) {
+  const text = reasonTitle?.trim() || fallback;
+  return text.length > 100 ? text.slice(0, 100) : text;
+}
+
+async function applyRemovalReason(itemIds: string[], reasonId: string, modNote: string): Promise<void> {
+  if (!reasonId || !itemIds.length) return;
+  await reddit.addRemovalNote({
+    itemIds,
+    reasonId,
+    modNote,
+  });
 }
 
 
@@ -779,18 +839,50 @@ app.get('/api/queue', async (c) => {
 });
 
 app.post('/api/remove', async (c) => {
-  const { ids, removalReasonIndex, asSpam = false } = await c.req.json<{
+  const { ids, removalReasonIndex, asSpam = false, removalReasonId, removalReasonTitle } = await c.req.json<{
     ids: string[];
     removalReasonIndex: number;
     asSpam?: boolean;
+    removalReasonId?: string;
+    removalReasonTitle?: string;
   }>();
+  const subredditName = getSubredditName();
   const batchId = crypto.randomUUID();
-  const items = (await Promise.all(ids.map((id) => getThing(id).then((thing) => normalizeThing(thing, getSubredditName()))))).map(
+  const appSettings = await resolveSettings(settings);
+  const redditRemovalReasonId = await resolveRedditRemovalReasonId({
+    subredditName,
+    removalReasonIndex,
+    requestedId: removalReasonId,
+    requestedTitle: removalReasonTitle,
+    configuredReasons: appSettings.removalReasons,
+  });
+  const removalNote = removalNoteText(
+    removalReasonTitle,
+    appSettings.removalReasons.find((reason) => reason.index === removalReasonIndex)?.text || `Rule ${removalReasonIndex}`,
+  );
+  const items = (await Promise.all(ids.map((id) => getThing(id).then((thing) => normalizeThing(thing, subredditName))))).map(
     (item) => ({ id: item.id, author: item.author, type: item.type }) satisfies PendingRemovalItem,
   );
-  const result = await allSettledAction(ids, (id) => reddit.remove(id as never, Boolean(asSpam)));
+  const settledRemovals = await Promise.allSettled(
+    ids.map(async (id) => {
+      await reddit.remove(id as never, Boolean(asSpam));
+      return id;
+    }),
+  );
+  const removedIds = settledRemovals.flatMap((result) => (result.status === 'fulfilled' ? [result.value] : []));
+  const result = {
+    ok: removedIds.length,
+    failed: settledRemovals.length - removedIds.length,
+  };
 
-  const appSettings = await resolveSettings(settings);
+  if (removedIds.length && redditRemovalReasonId) {
+    await applyRemovalReason(removedIds, redditRemovalReasonId, removalNote).catch((error) => {
+      console.warn('[keymoderator] removal reason failed', error);
+    });
+  } else if (removedIds.length) {
+    console.warn('[keymoderator] no matching Reddit removal reason found', { removalReasonIndex, removalReasonId, removalReasonTitle });
+  }
+
   await attributeModAction(items, removalAttributionSummary(removalReasonIndex, asSpam, appSettings.removalReasons), {
     label: asSpam ? 'SPAM_WARNING' : undefined,
   });

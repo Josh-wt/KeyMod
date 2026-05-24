@@ -47,7 +47,10 @@ export default function App() {
   const [removeAsSpam, setRemoveAsSpam] = useState(false);
   const [subredditRules, setSubredditRules] = useState<SubredditRule[]>([]);
   const [rulesLoading, setRulesLoading] = useState(true);
-  const [rulesPanelExpanded, setRulesPanelExpanded] = useState(true);
+  const [rulesPanelExpanded, setRulesPanelExpanded] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    return !window.matchMedia('(max-width: 720px)').matches;
+  });
   const [expandedRuleId, setExpandedRuleId] = useState<string | null>(null);
   const [activeRule, setActiveRule] = useState<SubredditRule | null>(null);
 
@@ -69,7 +72,7 @@ export default function App() {
   }, [feed, isQueueView, queue]);
 
   const removeIds = useCallback(
-    (ids: string[], reasonIndex: number, asSpam = false) => {
+    (ids: string[], reasonIndex: number, asSpam = false, removalReason?: { id?: string; title?: string }) => {
       if (!ids.length) return;
       const list = isQueueView ? queue : feed;
       const removedItems = list.visibleItems.filter((item) => ids.includes(item.id));
@@ -80,7 +83,7 @@ export default function App() {
       list.markRemoved(ids, pendingBatchId);
 
       void api
-        .remove(ids, reasonIndex, asSpam)
+        .remove(ids, reasonIndex, asSpam, removalReason?.id, removalReason?.title)
         .then((response) => {
           list.setRemovalBatchId(response.batchId);
           if (response.failed) {
@@ -259,7 +262,7 @@ export default function App() {
     (id: string) => {
       if (activeRule) {
         const reasonIndex = resolveRemovalReasonIndex(activeRule, settingsRef.current.removalReasons);
-        removeIds([id], reasonIndex);
+        removeIds([id], reasonIndex, false, { id: activeRule.removalReasonId, title: activeRule.shortName });
         return;
       }
       if (isQueueView) queue.toggleSelected(id);

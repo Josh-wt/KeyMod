@@ -145,7 +145,7 @@ button {
 
 .feed-load-more {
   display: block;
-  width: min(640px, calc(100% - 32px));
+  width: 100%;
   margin: 8px auto 32px;
   padding: 10px;
   border: 1px solid var(--line);
@@ -188,19 +188,21 @@ button:active {
 .queue-list {
   flex: 1 1 auto;
   display: grid;
+  grid-template-columns: minmax(0, min(640px, 100%));
   justify-content: center;
   align-content: start;
   gap: 0;
   min-width: 0;
   min-height: 0;
   overflow: auto;
-  padding: 0 0 32px;
+  padding: 0 16px 32px;
+  scrollbar-gutter: stable both-edges;
   background: #0e1113;
 }
 
 .queue-row {
   position: relative;
-  width: min(640px, calc(100% - 32px));
+  width: 100%;
   margin: 0 auto;
   padding-bottom: 2px;
   border: 1px solid transparent;
@@ -2054,23 +2056,57 @@ kbd {
   }
 
   .filter-sidebar {
-    gap: 6px;
+    position: relative;
+    z-index: 5;
+    display: flex;
+    gap: 8px;
+    align-items: center;
     max-height: none;
     padding: 8px 10px;
+    overflow: visible;
     border-right: none;
     border-bottom: 1px solid var(--line-soft);
+  }
+
+  .rules-sidebar {
+    order: 2;
+    flex: 0 0 auto;
   }
 
   .filter-sidebar-refresh {
     display: none;
   }
 
-  .rules-sidebar-body {
-    max-height: min(40vh, 320px);
-    overscroll-behavior: contain;
+  .rules-sidebar-toggle {
+    width: auto;
+    min-width: 0;
+    min-height: 32px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    white-space: nowrap;
   }
 
-  .rules-sidebar-toggle,
+  .rules-sidebar-toggle span {
+    flex: 0 0 auto;
+  }
+
+  .rules-sidebar-body {
+    position: fixed;
+    right: 10px;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    left: 10px;
+    z-index: 30;
+    display: grid;
+    max-height: min(70vh, 520px);
+    padding: 10px;
+    overflow: auto;
+    overscroll-behavior: contain;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: #101315;
+    box-shadow: 0 16px 48px rgb(0 0 0 / 55%);
+  }
+
   .rules-sidebar-rule-header,
   .rules-removal-toggle {
     min-height: 36px;
@@ -2092,6 +2128,8 @@ kbd {
   }
 
   .filter-sidebar-actions {
+    flex: 1 1 auto;
+    min-width: 0;
     gap: 8px;
   }
 
@@ -2118,7 +2156,7 @@ kbd {
   }
 
   .queue-row {
-    width: min(100%, calc(100% - 12px));
+    width: 100%;
   }
 
   .check-button {
@@ -2130,7 +2168,7 @@ kbd {
   }
 
   .feed-load-more {
-    width: min(100%, calc(100% - 12px));
+    width: 100%;
     min-height: 44px;
   }
 
@@ -2179,7 +2217,10 @@ kbd {
 
 @media (max-width: 420px) {
   .rules-sidebar-body {
-    max-height: min(46vh, 360px);
+    right: 8px;
+    bottom: max(8px, env(safe-area-inset-bottom));
+    left: 8px;
+    max-height: min(74vh, 520px);
   }
 
   .feed-context {

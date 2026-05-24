@@ -47,10 +47,10 @@ export const api = {
   },
   feedComments: (postId: string) =>
     request<{ comments: QueueItem[] }>(`/api/feed/${encodeURIComponent(postId)}/comments`),
-  remove: (ids: string[], removalReasonIndex: number, asSpam = false) =>
+  remove: (ids: string[], removalReasonIndex: number, asSpam = false, removalReasonId?: string, removalReasonTitle?: string) =>
     request<{ batchId: string; ok: number; failed: number }>('/api/remove', {
       method: 'POST',
-      body: JSON.stringify({ ids, removalReasonIndex, asSpam }),
+      body: JSON.stringify({ ids, removalReasonIndex, asSpam, removalReasonId, removalReasonTitle }),
     }),
   undo: (batchId: string) =>
     request<{ restored: number; failed: number }>('/api/undo', {

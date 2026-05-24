@@ -89,6 +89,7 @@ export type RemovalReason = {
 
 export type SubredditRule = {
   id: string;
+  removalReasonId?: string;
   shortName: string;
   description: string;
   kind: 'all' | 'link' | 'comment';

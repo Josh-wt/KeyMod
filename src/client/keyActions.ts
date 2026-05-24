@@ -19,7 +19,7 @@ type Deps = {
   removalReasons: RemovalReason[];
   patchItem: (id: string, patch: Partial<QueueItem>) => void;
   markApproved: (ids: string[]) => void;
-  removeIds: (ids: string[], reasonIndex: number, asSpam?: boolean) => void;
+  removeIds: (ids: string[], reasonIndex: number, asSpam?: boolean, removalReason?: { id?: string; title?: string }) => void;
   moveFocus: (direction: 1 | -1) => void;
   toggleFocused: () => void;
   selectAllVisible: () => void;
