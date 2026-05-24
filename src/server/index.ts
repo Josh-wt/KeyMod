@@ -883,15 +883,18 @@ app.get('/api/queue', async (c) => {
 });
 
 app.post('/api/remove', async (c) => {
-  const { ids, removalReasonIndex, asSpam = false, removalReasonId, removalReasonTitle } = await c.req.json<{
-    ids: string[];
-    removalReasonIndex: number;
-    asSpam?: boolean;
-    removalReasonId?: string;
-    removalReasonTitle?: string;
-  }>();
+  const { ids, removalReasonIndex, asSpam = false, removalReasonId, removalReasonTitle, batchId: requestedBatchId } =
+    await c.req.json<{
+      ids: string[];
+      removalReasonIndex: number;
+      asSpam?: boolean;
+      removalReasonId?: string;
+      removalReasonTitle?: string;
+      batchId?: string;
+    }>();
   const subredditName = getSubredditName();
-  const batchId = crypto.randomUUID();
+  const batchId =
+    typeof requestedBatchId === 'string' && requestedBatchId.length > 0 ? requestedBatchId : crypto.randomUUID();
   const appSettings = await resolveSettings(settings);
   const redditRemovalReasonId = await resolveRedditRemovalReasonId({
     subredditName,

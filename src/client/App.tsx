@@ -20,6 +20,7 @@ import { DEFAULT_KEYMAP } from '../settings';
 import { createModHandlers } from './createModHandlers';
 import { resolveRemovalReasonIndex } from './ruleMode';
 import { runKeyAction } from './keyActions';
+import { scrollFocusedRowIntoView } from './scrollFocusedRow';
 import { QueueToolbar } from './components/QueueToolbar';
 import { FeedView } from './components/FeedView';
 
@@ -89,9 +90,9 @@ export default function App() {
       list.markRemoved(ids, pendingBatchId);
 
       void api
-        .remove(ids, reasonIndex, asSpam, removalReason?.id, removalReason?.title)
+        .remove(ids, reasonIndex, asSpam, removalReason?.id, removalReason?.title, pendingBatchId)
         .then((response) => {
-          list.setRemovalBatchId(response.batchId);
+          if (response.batchId !== pendingBatchId) list.setRemovalBatchId(response.batchId);
           if (response.failed) {
             void list.refresh();
             addToast(`Removed ${response.ok}/${ids.length} items. ${response.failed} failed.`, 'warning');
@@ -125,20 +126,23 @@ export default function App() {
   );
 
   const undo = useCallback(async () => {
-    const batchId = isQueueView ? queue.state.lastBatchId : feed.state.lastBatchId;
+    if (undoInFlightRef.current) return;
+    const list = isQueueView ? queue : feed;
+    const batchId = list.state.lastBatchId;
     if (!batchId) return;
+
+    undoInFlightRef.current = true;
+    list.clearUndo();
+
     try {
       const response = await api.undo(batchId);
-      if (isQueueView) {
-        queue.clearUndo();
-        await queue.load();
-      } else {
-        feed.clearUndo();
-        feed.refresh();
-      }
+      if (isQueueView) await queue.load();
+      else feed.refresh();
       addToast(`Restored ${response.restored} items.`, response.failed ? 'warning' : 'success');
     } catch (error) {
       addToast(error instanceof Error ? error.message : 'Undo failed', 'error');
+    } finally {
+      undoInFlightRef.current = false;
     }
   }, [addToast, feed, isQueueView, queue]);
 
@@ -148,6 +152,8 @@ export default function App() {
     banReasons: [],
     conflicts: [],
   });
+  const undoInFlightRef = useRef(false);
+  const keyboardScrollRef = useRef(false);
 
   const openModalForItem = useCallback(
     (item: QueueItem, nextModal: Modal) => {
@@ -172,6 +178,7 @@ export default function App() {
 
   const dispatch = useCallback(
     async (action: KeyAction) => {
+      if (action === 'next' || action === 'prev') keyboardScrollRef.current = true;
       const list = isQueueView ? queue : feed;
       await runKeyAction(action, {
         targetIds: list.targetIds,
@@ -303,7 +310,7 @@ export default function App() {
     if (nextIndex >= 0) {
       queue.focusIndex(nextIndex);
       const row = document.querySelector(`.queue-row[data-queue-id="${items[nextIndex].id}"]`);
-      row?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      scrollFocusedRowIntoView(items[nextIndex].id);
     }
   }, [queue]);
 
@@ -417,6 +424,13 @@ export default function App() {
   useEffect(() => {
     setOpenMenuId(null);
   }, [feed.state.focusedIndex, isQueueView, queue.state.focusedIndex]);
+
+  useEffect(() => {
+    if (!keyboardScrollRef.current || !focused) return;
+    keyboardScrollRef.current = false;
+    const itemId = focused.id;
+    requestAnimationFrame(() => scrollFocusedRowIntoView(itemId));
+  }, [focused, feed.state.focusedIndex, isQueueView, queue.state.focusedIndex]);
 
   useEffect(() => {
     setFocusedUserInfo(null);

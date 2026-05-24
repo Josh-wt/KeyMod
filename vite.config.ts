@@ -1077,12 +1077,20 @@ function localApiPlugin(): Plugin {
         ) {
           void readJsonBody(req)
             .then((body) => {
-              const payload = (body ?? {}) as { ids?: string[]; level?: (typeof crowdLevels)[number] };
+              const payload = (body ?? {}) as {
+                ids?: string[];
+                level?: (typeof crowdLevels)[number];
+                batchId?: string;
+              };
               const ids = payload.ids ?? [];
 
               if (url.startsWith('/remove')) {
                 for (const id of ids) removedIds.add(id);
-                json(res, { batchId: crypto.randomUUID(), ok: ids.length, failed: 0 });
+                const batchId =
+                  typeof payload.batchId === 'string' && payload.batchId.length > 0
+                    ? payload.batchId
+                    : crypto.randomUUID();
+                json(res, { batchId, ok: ids.length, failed: 0 });
                 return;
               }
 
