@@ -461,6 +461,7 @@ type ModPatch = {
 let queueItems: DemoItem[] = [...demoItemsSeed];
 const modPatches: Record<string, ModPatch> = {};
 const removedIds = new Set<string>();
+const undoBatches = new Map<string, string[]>();
 
 function mergeItem(item: DemoItem) {
   return { ...item, ...modPatches[item.id] };
@@ -1124,6 +1125,7 @@ function localApiPlugin(): Plugin {
                   typeof payload.batchId === 'string' && payload.batchId.length > 0
                     ? payload.batchId
                     : crypto.randomUUID();
+                undoBatches.set(batchId, ids);
                 json(res, { batchId, ok: ids.length, failed: 0 });
                 return;
               }
@@ -1220,8 +1222,18 @@ function localApiPlugin(): Plugin {
           return;
         }
         if (url.startsWith('/undo')) {
-          removedIds.clear();
-          json(res, { restored: queueItems.length, failed: 0 });
+          void readJsonBody(req)
+            .then((body) => {
+              const batchId = typeof (body as { batchId?: string })?.batchId === 'string' ? (body as { batchId: string }).batchId : '';
+              const ids = undoBatches.get(batchId) ?? [];
+              for (const id of ids) removedIds.delete(id);
+              undoBatches.delete(batchId);
+              json(res, { restored: ids.length, failed: 0 });
+            })
+            .catch(() => {
+              res.statusCode = 400;
+              json(res, { error: 'Invalid JSON body' });
+            });
           return;
         }
         json(res, { ok: true });

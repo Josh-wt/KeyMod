@@ -10,7 +10,7 @@ import {
 import type { ModItemHandlers } from '../modActions';
 import { reportCount } from '../queueReports';
 import { FeedComment } from './FeedComment';
-import { FeedPostCard, feedPostFromItem, feedPostFromParent } from './FeedPostCard';
+import { FeedPostCard, feedPostFromItem, feedPostFromParent, queueItemFromParentPost } from './FeedPostCard';
 import { QueueReportTags } from './QueueReportTags';
 
 type Props = {
@@ -88,19 +88,28 @@ export const QueueItem = memo(function QueueItem({
   const chainDepthStyle =
     chainDepth > 0 ? ({ '--chain-depth': String(chainDepth) } as React.CSSProperties) : undefined;
   const hasReports = reportCount(item) > 0;
+  const showRowReports = isQueueView && isComment && hasReports;
   const showPostReports = !isComment && hasReports;
+  const highlightReportedComment = isQueueView && isComment && hasReports;
   const showCommentChain =
     isQueueView && isComment && ancestorComments.length > 0 && !continuesCommentChainAbove && !embeddedParent;
   const showPostParent = Boolean(parentPost) && !continuesCommentChainAbove && ancestorComments.length === 0;
+  const parentPostItem = parentPost ? queueItemFromParentPost(parentPost, item) : null;
+  const parentPostMenuOpen = Boolean(parentPostItem && openContextMenuId === parentPostItem.id);
 
   return (
     <article
-      className={`queue-row${showPostReports ? ' queue-row-reported' : ''}${focused ? ' focused' : ''}${selected ? ' selected' : ''}${dragPreviewed ? ' drag-previewed' : ''}${isComment ? ' queue-row-comment' : ''}${anchorsChainBelow ? ' queue-row-comment-chain-anchor' : ''}${continuesCommentChainAbove ? ' queue-row-comment-chained' : ''}${embeddedParent ? ' queue-row-comment-embedded-parent' : ''}${showCommentChain ? ' queue-row-comment-expanded' : ''}`}
+      className={`queue-row${showRowReports ? ' queue-row-reported' : ''}${showPostReports ? ' queue-row-reported' : ''}${focused ? ' focused' : ''}${selected ? ' selected' : ''}${dragPreviewed ? ' drag-previewed' : ''}${isComment ? ' queue-row-comment' : ''}${anchorsChainBelow ? ' queue-row-comment-chain-anchor' : ''}${continuesCommentChainAbove ? ' queue-row-comment-chained' : ''}${embeddedParent ? ' queue-row-comment-embedded-parent' : ''}${showCommentChain ? ' queue-row-comment-expanded' : ''}`}
       data-queue-id={item.id}
       data-chain-depth={chainDepth > 0 ? chainDepth : undefined}
       style={chainDepthStyle}
       onMouseDown={(event) => {
-        if ((event.target as Element).closest('[data-mod-trigger], .check-button, .mod-actions-menu-portal, .context-comment-card')) return;
+        if (
+          (event.target as Element).closest(
+            '[data-mod-trigger], .check-button, .mod-actions-menu-portal, .context-comment-card, .comment-expanded-parent, .comment-thread-parent',
+          )
+        )
+          return;
         onDragStart(index);
       }}
       onMouseEnter={() => onFocusIndex(index)}
@@ -126,9 +135,18 @@ export const QueueItem = memo(function QueueItem({
       {isComment ? (
         showCommentChain ? (
           <div className="comment-expanded-view">
-            {parentPost ? (
+            {parentPost && parentPostItem ? (
               <div className="comment-expanded-parent">
-                <FeedPostCard post={feedPostFromParent(parentPost!)} variant="embedded" expanded onStop={stop} />
+                <FeedPostCard
+                  post={feedPostFromParent(parentPost)}
+                  item={parentPostItem}
+                  variant="embedded"
+                  expanded
+                  modHandlers={modHandlers}
+                  menuOpen={parentPostMenuOpen}
+                  onMenuOpenChange={(open) => onContextMenuOpenChange?.(open ? parentPostItem.id : null)}
+                  onStop={stop}
+                />
               </div>
             ) : null}
             <div className="comment-chain-section">
@@ -179,12 +197,20 @@ export const QueueItem = memo(function QueueItem({
           <div
             className={`comment-queue-stack${showPostParent || continuesCommentChainAbove ? ' comment-queue-stack-threaded' : ''}${continuesCommentChainAbove ? ' comment-queue-stack-chained' : ''}${showPostParent && !continuesParentThreadAbove ? ' comment-queue-stack-detached' : ''}`}
           >
-            {showPostParent ? (
+            {showPostParent && parentPostItem ? (
               <div className="comment-thread-parent">
                 <div className="comment-thread-gutter" aria-hidden="true" />
                 <div className="crosspost-shell">
                   <span className="crosspost-label">Comment in thread</span>
-                  <FeedPostCard post={feedPostFromParent(parentPost!)} variant="embedded" onStop={stop} />
+                  <FeedPostCard
+                    post={feedPostFromParent(parentPost!)}
+                    item={parentPostItem}
+                    variant="embedded"
+                    modHandlers={modHandlers}
+                    menuOpen={parentPostMenuOpen}
+                    onMenuOpenChange={(open) => onContextMenuOpenChange?.(open ? parentPostItem.id : null)}
+                    onStop={stop}
+                  />
                 </div>
               </div>
             ) : null}
@@ -196,6 +222,7 @@ export const QueueItem = memo(function QueueItem({
               ) : null}
               <FeedComment
                 item={item}
+                highlighted={highlightReportedComment}
                 isQueueTarget={hasReports}
                 modHandlers={modHandlers}
                 menuOpen={menuOpen}

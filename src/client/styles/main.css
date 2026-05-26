@@ -200,13 +200,18 @@ button:active {
   background: #0e1113;
 }
 
+.queue-list .queue-row + .queue-row {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+
 .queue-row {
   position: relative;
   width: 100%;
   margin: 0 auto;
   padding-bottom: 2px;
   border: 1px solid transparent;
-  border-bottom-color: var(--line-soft);
   border-radius: 6px;
   background: var(--surface-0);
   transition:
@@ -216,7 +221,6 @@ button:active {
 }
 
 .queue-row-reported {
-  margin-top: 12px;
   border-top-color: var(--line-soft);
 }
 
@@ -289,9 +293,11 @@ button:active {
   background: transparent;
 }
 
-.queue-row-comment.queue-row-reported {
-  margin-top: 0;
-  border-top-color: transparent;
+.queue-row-comment.queue-row-reported .feed-comment-highlighted,
+.queue-row-comment.queue-row-reported .context-comment-reported .feed-comment-card {
+  border-color: rgb(200 72 72 / 50%);
+  background: rgb(200 72 72 / 8%);
+  box-shadow: inset 3px 0 0 var(--report-dot), 0 0 12px rgb(200 72 72 / 12%);
 }
 
 .queue-row-comment.focused,
@@ -689,6 +695,13 @@ button:active {
   font-weight: 600;
 }
 
+.feed-post-embedded-moderatable .feed-post-actions {
+  justify-content: flex-end;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line-soft);
+}
+
 .comment-queue-stack {
   display: grid;
   gap: 0;
@@ -801,6 +814,12 @@ button:active {
 
 .comment-thread-gutter-continued::after {
   background: var(--thread-line);
+}
+
+.comment-queue-stack .comment-thread-reply:has(.feed-comment-highlighted) {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgb(200 72 72 / 40%);
 }
 
 .comment-thread-parent,
@@ -2021,7 +2040,9 @@ kbd {
 }
 
 .comment-expanded-parent {
-  margin-bottom: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
 }
 
 .comment-expanded-parent .feed-post-embedded {
@@ -2053,9 +2074,16 @@ kbd {
   position: relative;
 }
 
+.context-comment-card + .context-comment-card {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line-soft);
+}
+
 .context-comment-card .feed-comment-card {
   border-color: var(--line-soft);
   background: var(--surface-0);
+  opacity: 0.92;
 }
 
 .comment-chain-list .context-comment-chain-node[data-chain-depth] {
@@ -2085,6 +2113,13 @@ kbd {
 
 .context-comment-reported {
   position: relative;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgb(200 72 72 / 40%);
+}
+
+.context-comment-reported .feed-comment-card {
+  opacity: 1;
 }
 
 .context-comment-reported .feed-comment-card {
