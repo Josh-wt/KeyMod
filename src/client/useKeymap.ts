@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from './api';
-import { actionForKey } from './keyBinding';
+import { actionForKey, isUndoKey } from './keyBinding';
 import { DEFAULT_KEYMAP, detectKeyConflicts } from '../settings';
 import type { AppSettings, KeyAction } from '../shared';
 
@@ -11,6 +11,7 @@ export function useKeymap(
   isModalOpen: boolean,
   addToast: (message: string, kind?: 'info' | 'warning' | 'error' | 'success', persistent?: boolean) => void,
   onClearSelection?: () => void,
+  undoAvailable = false,
 ) {
   const [settings, setSettings] = useState<AppSettings>({
     keymap: DEFAULT_KEYMAP,
@@ -81,6 +82,12 @@ export function useKeymap(
         return;
       }
 
+      if (undoAvailable && isUndoKey(e)) {
+        e.preventDefault();
+        void dispatch('undo');
+        return;
+      }
+
       const action = actionForKey(settings.keymap, e) as KeyAction | undefined;
       if (action) {
         e.preventDefault();
@@ -93,7 +100,7 @@ export function useKeymap(
       window.removeEventListener('keydown', onKeyDown);
       if (banChordTimer !== null) window.clearTimeout(banChordTimer);
     };
-  }, [addToast, dispatch, handleBanReason, handleRemove, isModalOpen, onClearSelection, settings.keymap]);
+  }, [addToast, dispatch, handleBanReason, handleRemove, isModalOpen, onClearSelection, settings.keymap, undoAvailable]);
 
   return settings;
 }
