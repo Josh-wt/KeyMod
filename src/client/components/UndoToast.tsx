@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { isUndoKey } from '../keyBinding';
 
 type Props = {
   count: number;
@@ -24,6 +25,18 @@ export function UndoToast({ count, reason, reasonIndex, countdown, onUndo, onDon
     const timer = window.setInterval(() => setRemaining((value) => value - 1), 1000);
     return () => window.clearInterval(timer);
   }, [onDone, remaining]);
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (!isUndoKey(event)) return;
+      const activeTag = document.activeElement?.tagName;
+      if (activeTag === 'INPUT' || activeTag === 'TEXTAREA') return;
+      event.preventDefault();
+      onUndo();
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onUndo]);
 
   return (
     <div className="undo-toast">

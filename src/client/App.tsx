@@ -87,18 +87,25 @@ export default function App() {
       setLastRemovalCount(ids.length);
       setLastRemovalReason(reasonLabel);
       setLastRemovalReasonIndex(reasonIndex);
+      pendingUndoRef.current = { batchId: pendingBatchId, items: removedItems };
       list.markRemoved(ids, pendingBatchId);
 
       void api
         .remove(ids, reasonIndex, asSpam, removalReason?.id, removalReason?.title, pendingBatchId)
         .then((response) => {
-          if (response.batchId !== pendingBatchId) list.setRemovalBatchId(response.batchId);
+          if (response.batchId !== pendingBatchId) {
+            list.setRemovalBatchId(response.batchId);
+            if (pendingUndoRef.current?.batchId === pendingBatchId) {
+              pendingUndoRef.current = { batchId: response.batchId, items: removedItems };
+            }
+          }
           if (response.failed) {
             void list.refresh();
             addToast(`Removed ${response.ok}/${ids.length} items. ${response.failed} failed.`, 'warning');
           }
         })
         .catch((error) => {
+          pendingUndoRef.current = null;
           list.restoreItems(removedItems);
           addToast(error instanceof Error ? error.message : 'Remove failed', 'error');
         });
@@ -128,17 +135,25 @@ export default function App() {
   const undo = useCallback(async () => {
     if (undoInFlightRef.current) return;
     const list = isQueueView ? queue : feed;
-    const batchId = list.state.lastBatchId;
+    const pending = pendingUndoRef.current;
+    const batchId = pending?.batchId ?? list.state.lastBatchId;
     if (!batchId) return;
 
+    const itemsToRestore = pending?.items ?? [];
     undoInFlightRef.current = true;
+    pendingUndoRef.current = null;
     list.clearUndo();
 
     try {
       const response = await api.undo(batchId);
-      if (isQueueView) await queue.load();
+      if (itemsToRestore.length) list.restoreItems(itemsToRestore);
+      else if (isQueueView) await queue.load();
       else feed.refresh();
-      addToast(`Restored ${response.restored} items.`, response.failed ? 'warning' : 'success');
+
+      const restoredCount = Math.max(response.restored, itemsToRestore.length);
+      addToast(`Restored ${restoredCount} items.`, response.failed ? 'warning' : 'success');
+
+      if (itemsToRestore.length) void list.refresh();
     } catch (error) {
       addToast(error instanceof Error ? error.message : 'Undo failed', 'error');
     } finally {
@@ -153,6 +168,7 @@ export default function App() {
     conflicts: [],
   });
   const undoInFlightRef = useRef(false);
+  const pendingUndoRef = useRef<{ batchId: string; items: QueueItem[] } | null>(null);
   const keyboardScrollRef = useRef(false);
 
   const openModalForItem = useCallback(
@@ -203,6 +219,14 @@ export default function App() {
     [addToast, clearSelection, feed, isQueueView, openModalForItem, queue, removeIds, undo],
   );
 
+  const undoCountdown = isQueueView ? queue.state.undoCountdown : feed.state.undoCountdown;
+
+  const clearPendingUndo = useCallback(() => {
+    pendingUndoRef.current = null;
+    if (isQueueView) queue.clearUndo();
+    else feed.clearUndo();
+  }, [feed, isQueueView, queue]);
+
   const settings = useKeymap(
     dispatch,
     remove,
@@ -231,6 +255,7 @@ export default function App() {
     modal !== null,
     addToast,
     clearSelection,
+    undoCountdown !== null,
   );
 
   useEffect(() => {
@@ -285,7 +310,6 @@ export default function App() {
   );
 
   const focused = isQueueView ? queue.focused : feed.focused;
-  const undoCountdown = isQueueView ? queue.state.undoCountdown : feed.state.undoCountdown;
 
   const scrollToNextComment = useCallback(() => {
     const items = queue.visibleItems;
@@ -638,10 +662,7 @@ export default function App() {
           reasonIndex={lastRemovalReasonIndex || undefined}
           countdown={undoCountdown}
           onUndo={undo}
-          onDone={() => {
-            if (isQueueView) queue.clearUndo();
-            else feed.clearUndo();
-          }}
+          onDone={clearPendingUndo}
         />
       ) : null}
 
