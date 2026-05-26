@@ -40,6 +40,8 @@ export type QueueItem = {
   domain?: string;
   subredditIcon?: string;
   postId?: string;
+  /** Parent thing id: `t3_` post or `t1_` comment this replies to. */
+  parentId?: string;
   parentPostTitle?: string;
   parentPostPermalink?: string;
   parentPost?: ParentPostContext;

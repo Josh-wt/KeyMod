@@ -20,6 +20,7 @@ import { DEFAULT_KEYMAP } from '../settings';
 import { createModHandlers } from './createModHandlers';
 import { resolveRemovalReasonIndex } from './ruleMode';
 import { runKeyAction } from './keyActions';
+import { embeddedParentCommentIds } from './commentChain';
 import { scrollFocusedRowIntoView } from './scrollFocusedRow';
 import { QueueToolbar } from './components/QueueToolbar';
 import { FeedView } from './components/FeedView';
@@ -286,33 +287,10 @@ export default function App() {
 
   const focused = isQueueView ? queue.focused : feed.focused;
   const undoCountdown = isQueueView ? queue.state.undoCountdown : feed.state.undoCountdown;
-
-  const scrollToNextComment = useCallback(() => {
-    const items = queue.visibleItems;
-    const currentIndex = queue.state.focusedIndex;
-    let nextIndex = -1;
-
-    for (let i = currentIndex + 1; i < items.length; i++) {
-      if (items[i].type === 'comment') {
-        nextIndex = i;
-        break;
-      }
-    }
-    if (nextIndex < 0) {
-      for (let i = 0; i < currentIndex; i++) {
-        if (items[i].type === 'comment') {
-          nextIndex = i;
-          break;
-        }
-      }
-    }
-
-    if (nextIndex >= 0) {
-      queue.focusIndex(nextIndex);
-      const row = document.querySelector(`.queue-row[data-queue-id="${items[nextIndex].id}"]`);
-      scrollFocusedRowIntoView(items[nextIndex].id);
-    }
-  }, [queue]);
+  const embeddedParentIds = useMemo(
+    () => (isQueueView ? embeddedParentCommentIds(queue.visibleItems) : new Set<string>()),
+    [isQueueView, queue.visibleItems],
+  );
 
   const modHandlers = useMemo(
     () =>
@@ -545,7 +523,6 @@ export default function App() {
               isLoading={queue.state.isLoading}
               onFilterChange={queue.setFilter}
               onRefresh={queue.refresh}
-              onNextComment={scrollToNextComment}
               rules={subredditRules}
               rulesLoading={rulesLoading}
               rulesPanelExpanded={rulesPanelExpanded}
@@ -562,7 +539,10 @@ export default function App() {
                   key={item.id}
                   item={item}
                   index={index}
+                  visibleItems={queue.visibleItems}
                   previousItem={index > 0 ? queue.visibleItems[index - 1] : undefined}
+                  nextItem={index < queue.visibleItems.length - 1 ? queue.visibleItems[index + 1] : undefined}
+                  embeddedParent={embeddedParentIds.has(item.id)}
                   focused={index === queue.state.focusedIndex && queue.state.focusedIndex >= 0}
                   selected={queue.state.selectedIds.has(item.id)}
                   dragPreviewed={queue.state.dragPreviewIds.has(item.id)}

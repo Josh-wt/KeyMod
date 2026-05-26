@@ -1,4 +1,4 @@
-import { MessageCircle, RefreshCw } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import type { QueueFilter, SubredditRule } from '../../shared';
 import { RulesSidebar } from './RulesSidebar';
 
@@ -15,7 +15,6 @@ type Props = {
   isLoading: boolean;
   onFilterChange: (filter: QueueFilter) => void;
   onRefresh: () => void;
-  onNextComment?: () => void;
   rules: SubredditRule[];
   rulesLoading: boolean;
   rulesPanelExpanded: boolean;
@@ -26,7 +25,7 @@ type Props = {
   onRemovalModeToggle: (rule: SubredditRule) => void;
 };
 
-const filters: Array<{ id: QueueFilter; label: string; count?: (stats: Stats) => number }> = [
+const filters: Array<{ id: QueueFilter; label: string; count: (stats: Stats) => number }> = [
   { id: 'all', label: 'All', count: (s) => s.total },
   { id: 'posts', label: 'Posts', count: (s) => s.posts },
   { id: 'comments', label: 'Comments', count: (s) => s.comments },
@@ -39,7 +38,6 @@ export function QueueToolbar({
   isLoading,
   onFilterChange,
   onRefresh,
-  onNextComment,
   rules,
   rulesLoading,
   rulesPanelExpanded,
@@ -51,28 +49,21 @@ export function QueueToolbar({
 }: Props) {
   return (
     <aside className="filter-sidebar" aria-label="Queue controls">
-      <RulesSidebar
-        rules={rules}
-        isLoading={rulesLoading}
-        panelExpanded={rulesPanelExpanded}
-        onPanelExpandedChange={onRulesPanelExpandedChange}
-        expandedRuleId={expandedRuleId}
-        activeRuleId={activeRuleId}
-        onRuleExpand={onRuleExpand}
-        onRemovalModeToggle={onRemovalModeToggle}
-      />
-      <div className="filter-sidebar-actions">
-        <button type="button" className="filter-sidebar-refresh" onClick={onRefresh} disabled={isLoading}>
-          <RefreshCw size={16} className={isLoading ? 'spin' : ''} />
-          <span>Refresh</span>
-        </button>
-        {stats.comments > 0 && onNextComment ? (
-          <button type="button" className="filter-sidebar-refresh next-comment-button" onClick={onNextComment}>
-            <MessageCircle size={16} />
-            <span>Next comment</span>
+      <section className="sidebar-panel sidebar-panel-queue">
+        <div className="sidebar-panel-toolbar">
+          <h2 className="sidebar-section-title">Queue</h2>
+          <button
+            type="button"
+            className="sidebar-icon-button"
+            onClick={onRefresh}
+            disabled={isLoading}
+            aria-label="Refresh queue"
+            title="Refresh queue"
+          >
+            <RefreshCw size={15} className={isLoading ? 'spin' : ''} />
           </button>
-        ) : null}
-        <div className="queue-filters" role="tablist" aria-label="Queue filters">
+        </div>
+        <nav className="queue-filters" role="tablist" aria-label="Filter queue">
           {filters.map((entry) => (
             <button
               key={entry.id}
@@ -83,12 +74,23 @@ export function QueueToolbar({
               data-filter={entry.id}
               onClick={() => onFilterChange(entry.id)}
             >
-              {entry.label}
-              <span>{entry.count?.(stats) ?? 0}</span>
+              <span className="queue-filter-label">{entry.label}</span>
+              <span className="queue-filter-count">{entry.count(stats)}</span>
             </button>
           ))}
-        </div>
-      </div>
+        </nav>
+      </section>
+
+      <RulesSidebar
+        rules={rules}
+        isLoading={rulesLoading}
+        panelExpanded={rulesPanelExpanded}
+        onPanelExpandedChange={onRulesPanelExpandedChange}
+        expandedRuleId={expandedRuleId}
+        activeRuleId={activeRuleId}
+        onRuleExpand={onRuleExpand}
+        onRemovalModeToggle={onRemovalModeToggle}
+      />
     </aside>
   );
 }

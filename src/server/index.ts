@@ -153,6 +153,32 @@ function postIdFromRaw(raw: JsonRecord): string {
   return '';
 }
 
+function thingIdFromRaw(raw: JsonRecord): string {
+  const direct = stringValue(raw.id ?? raw.name);
+  if (direct.startsWith('t3_') || direct.startsWith('t1_')) return direct;
+  if (direct.length > 0 && !direct.includes('_')) {
+    const prefix = stringValue(raw.kind) === 't3' ? 't3_' : 't1_';
+    return `${prefix}${direct}`;
+  }
+  return direct;
+}
+
+function parentIdFromRaw(raw: JsonRecord, rawValue?: unknown): string | undefined {
+  const candidates: unknown[] = [raw.parentId, raw.parent_id];
+  if (rawValue && typeof rawValue === 'object' && rawValue !== null && 'parentId' in rawValue) {
+    candidates.unshift((rawValue as { parentId?: unknown }).parentId);
+  }
+
+  for (const candidate of candidates) {
+    const direct = stringValue(candidate);
+    if (!direct) continue;
+    if (direct.startsWith('t3_') || direct.startsWith('t1_')) return direct;
+    if (/^[a-z0-9]+$/i.test(direct)) return `t1_${direct}`;
+  }
+
+  return undefined;
+}
+
 function normalizeParentPost(rawValue: unknown, fallbackSubreddit = '', subredditIcon = ''): ParentPostContext | undefined {
   const raw = ((rawValue as JsonRecord)?.data ?? rawValue) as JsonRecord;
   const id = String(raw.id ?? raw.name ?? '');
@@ -184,7 +210,7 @@ function normalizeParentPost(rawValue: unknown, fallbackSubreddit = '', subreddi
 
 function normalizeThing(rawValue: unknown, fallbackSubreddit = ''): QueueItem {
   const raw = ((rawValue as JsonRecord)?.data ?? rawValue) as JsonRecord;
-  const id = String(raw.id ?? raw.name ?? '');
+  const id = thingIdFromRaw(raw);
   const body = String(raw.body ?? raw.selftext ?? '');
   const type = id.startsWith('t1_') || (body && !raw.title) ? 'comment' : 'post';
   const reportReasons = getReportReasons(raw);
@@ -218,6 +244,7 @@ function normalizeThing(rawValue: unknown, fallbackSubreddit = ''): QueueItem {
     url,
     domain: domainFromUrl(url || raw.permalink),
     postId: postId || undefined,
+    parentId: type === 'comment' ? parentIdFromRaw(raw, rawValue) : undefined,
     parentPostTitle,
     parentPostPermalink,
     locked: Boolean(raw.locked ?? raw.isLocked),
@@ -368,32 +395,60 @@ async function fetchCommentChain(
   targetCommentId: string,
   fallbackSubreddit: string,
 ): Promise<QueueItem[]> {
+  const subredditIcon = subredditIconCache.get(fallbackSubreddit.toLowerCase()) || undefined;
+
+  const normalizeComment = (raw: unknown) => ({
+    ...normalizeThing(raw, fallbackSubreddit),
+    subredditIcon,
+  });
+
+  let target: QueueItem | undefined;
+  const byId = new Map<string, QueueItem>();
+
   try {
     const comments = await commentTreeItems(
       reddit.getComments({ postId: postId as never, pageSize: 200, depth: 10 }),
     );
-    const normalized = comments.map((c) => ({
-      ...normalizeThing(c, fallbackSubreddit),
-      subredditIcon: subredditIconCache.get(fallbackSubreddit.toLowerCase()) || undefined,
-    }));
+    for (const comment of comments) {
+      const normalized = normalizeComment(comment);
+      if (normalized.id) byId.set(normalized.id, normalized);
+    }
+    target = byId.get(targetCommentId);
+  } catch {
+    // Fall back to walking parents via individual comment lookups.
+  }
 
-    const byId = new Map(normalized.map((c) => [c.id, c]));
-    const target = byId.get(targetCommentId);
-    if (!target) return [];
+  if (!target) {
+    try {
+      target = normalizeComment(await reddit.getCommentById(targetCommentId as never));
+    } catch {
+      return [];
+    }
+  }
 
-    const chain: QueueItem[] = [];
-    const seen = new Set<string>();
+  const chain: QueueItem[] = [];
+  const seen = new Set<string>([targetCommentId]);
+  let parentId = target.parentId;
 
-    for (const c of normalized) {
-      if (seen.has(c.id)) continue;
-      seen.add(c.id);
-      chain.push(c);
+  while (parentId?.startsWith('t1_')) {
+    if (seen.has(parentId)) break;
+    seen.add(parentId);
+
+    let parent = byId.get(parentId);
+    if (!parent) {
+      try {
+        parent = normalizeComment(await reddit.getCommentById(parentId as never));
+        byId.set(parent.id, parent);
+      } catch {
+        break;
+      }
     }
 
-    return chain.filter((c) => c.id !== targetCommentId).slice(0, 30);
-  } catch {
-    return [];
+    chain.unshift(parent);
+    parentId = parent.parentId;
   }
+
+  return chain.slice(-30);
 }
 
 async function enrichQueueItems(items: QueueItem[], fallbackSubreddit: string): Promise<QueueItem[]> {
@@ -421,8 +476,24 @@ async function enrichQueueItems(items: QueueItem[], fallbackSubreddit: string): 
   );
 
   const commentItems = items.filter((item) => item.type === 'comment' && item.postId);
-  await Promise.all(
+  const commentItemsWithParents = await Promise.all(
     commentItems.map(async (item) => {
+      let parentId = item.parentId;
+      if (!parentId) {
+        try {
+          const comment = await reddit.getCommentById(item.id as never);
+          parentId = normalizeThing(comment, item.subreddit || fallbackSubreddit).parentId;
+        } catch {
+          // Comment may be deleted; keep queue item as-is.
+        }
+      }
+      return parentId ? { ...item, parentId } : item;
+    }),
+  );
+  const commentById = new Map(commentItemsWithParents.map((item) => [item.id, item]));
+
+  await Promise.all(
+    commentItemsWithParents.map(async (item) => {
       if (!item.postId) return;
       const chain = await fetchCommentChain(item.postId, item.id, item.subreddit || fallbackSubreddit);
       if (chain.length) commentChains.set(item.id, chain);
@@ -430,6 +501,8 @@ async function enrichQueueItems(items: QueueItem[], fallbackSubreddit: string): 
   );
 
   return items.map((item) => {
+    const enrichedComment = commentById.get(item.id);
+    const baseItem = enrichedComment ?? item;
     const subredditIcon = subredditIconCache.get(item.subreddit.toLowerCase()) || undefined;
     const parentFromApi = item.postId ? parentPosts.get(item.postId) : undefined;
     const parentPost =
@@ -445,7 +518,7 @@ async function enrichQueueItems(items: QueueItem[], fallbackSubreddit: string): 
         : undefined);
 
     return {
-      ...item,
+      ...baseItem,
       subredditIcon,
       parentPost,
       contextComments: commentChains.get(item.id),

@@ -29,74 +29,82 @@ export function RulesSidebar({
   onRemovalModeToggle,
 }: Props) {
   return (
-    <section className={`rules-sidebar${panelExpanded ? ' panel-expanded' : ''}`} aria-label="Removal reasons">
+    <section
+      className={`sidebar-panel sidebar-panel-rules${panelExpanded ? ' is-expanded' : ''}`}
+      aria-label="Removal rules"
+    >
       <button
         type="button"
-        className="rules-sidebar-toggle"
+        className="sidebar-panel-heading"
         aria-expanded={panelExpanded}
         onClick={() => onPanelExpandedChange(!panelExpanded)}
       >
-        <Scale size={14} aria-hidden="true" />
-        <span>Rules</span>
+        <span className="sidebar-panel-heading-label">
+          <Scale size={14} aria-hidden="true" />
+          <span>Removal rules</span>
+        </span>
         {panelExpanded ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />}
       </button>
 
       {panelExpanded ? (
-        <div className="rules-sidebar-body">
-          {isLoading ? <p className="rules-sidebar-status">Loading rules…</p> : null}
-          {!isLoading && !rules.length ? <p className="rules-sidebar-status">No subreddit rules found.</p> : null}
+        <div className="sidebar-panel-body">
+          {isLoading ? <p className="sidebar-panel-hint">Loading rules…</p> : null}
+          {!isLoading && !rules.length ? <p className="sidebar-panel-hint">No subreddit rules found.</p> : null}
           {!isLoading && rules.length ? (
-            <ul className="rules-sidebar-list">
-              {rules.map((rule) => {
-                const open = expandedRuleId === rule.id;
-                const removalOn = activeRuleId === rule.id;
-                return (
-                  <li
-                    key={rule.id}
-                    className={`rules-sidebar-item${open ? ' open' : ''}${removalOn ? ' removal-on' : ''}`}
-                  >
-                    <button
-                      type="button"
-                      className="rules-sidebar-rule-header"
-                      aria-expanded={open}
-                      onClick={() => onRuleExpand(rule.id)}
+            <>
+              <p className="sidebar-panel-hint">Expand a rule to turn on removal mode, then select items in the queue.</p>
+              <ul className="rules-list">
+                {rules.map((rule) => {
+                  const open = expandedRuleId === rule.id;
+                  const removalOn = activeRuleId === rule.id;
+                  return (
+                    <li
+                      key={rule.id}
+                      className={`rules-list-item${open ? ' is-open' : ''}${removalOn ? ' is-active' : ''}`}
                     >
-                      <span className="rules-sidebar-rule-name">{rule.shortName}</span>
-                      {removalOn ? <span className="rules-sidebar-rule-badge">On</span> : null}
-                      <ChevronDown size={14} className="rules-sidebar-rule-chevron" aria-hidden="true" />
-                    </button>
-                    {open ? (
-                      <div className="rules-sidebar-rule-details">
-                        {rule.description ? <p className="rules-sidebar-rule-description">{rule.description}</p> : null}
-                        <dl className="rules-sidebar-rule-meta">
-                          <div>
-                            <dt>Applies to</dt>
-                            <dd>{ruleKindLabel(rule.kind)}</dd>
-                          </div>
-                          {rule.violationReason && rule.violationReason !== rule.shortName ? (
+                      <button
+                        type="button"
+                        className="rules-list-trigger"
+                        aria-expanded={open}
+                        onClick={() => onRuleExpand(rule.id)}
+                      >
+                        <span className="rules-list-name">{rule.shortName}</span>
+                        {removalOn ? <span className="rules-list-badge">Active</span> : null}
+                        <ChevronDown size={14} className="rules-list-chevron" aria-hidden="true" />
+                      </button>
+                      {open ? (
+                        <div className="rules-list-details">
+                          {rule.description ? <p className="rules-list-description">{rule.description}</p> : null}
+                          <dl className="rules-list-meta">
                             <div>
-                              <dt>Report label</dt>
-                              <dd>{rule.violationReason}</dd>
+                              <dt>Applies to</dt>
+                              <dd>{ruleKindLabel(rule.kind)}</dd>
                             </div>
-                          ) : null}
-                        </dl>
-                        <button
-                          type="button"
-                          className={`rules-removal-toggle${removalOn ? ' on' : ''}`}
-                          aria-pressed={removalOn}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            onRemovalModeToggle(rule);
-                          }}
-                        >
-                          {removalOn ? 'Removal mode: On' : 'Turn on removal mode'}
-                        </button>
-                      </div>
-                    ) : null}
-                  </li>
-                );
-              })}
-            </ul>
+                            {rule.violationReason && rule.violationReason !== rule.shortName ? (
+                              <div>
+                                <dt>Report label</dt>
+                                <dd>{rule.violationReason}</dd>
+                              </div>
+                            ) : null}
+                          </dl>
+                          <button
+                            type="button"
+                            className={`rules-removal-toggle${removalOn ? ' on' : ''}`}
+                            aria-pressed={removalOn}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              onRemovalModeToggle(rule);
+                            }}
+                          >
+                            {removalOn ? 'Removal mode on' : 'Use this rule'}
+                          </button>
+                        </div>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
           ) : null}
         </div>
       ) : null}

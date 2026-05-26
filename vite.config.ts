@@ -36,6 +36,70 @@ const demoItemsSeed: QueueItem[] = [
     domain: 'reddit.com',
   },
   {
+    id: 't1_chain_1',
+    type: 'comment',
+    title: 'Chain Comment 1',
+    body: 'Chain Comment 1',
+    author: 'eyal282',
+    authorId: 'u_eyal282',
+    subreddit: 'teenagers',
+    subredditIcon,
+    postId: 't3_keyqueue_demo_1',
+    parentId: 't3_keyqueue_demo_1',
+    permalink: 'https://reddit.com/r/teenagers/comments/demo/chain1',
+    createdAt: Date.now() - 5 * 60 * 60 * 1000,
+    reportReasons: [],
+    numReports: 0,
+    score: 1,
+    parentPostTitle: "I'm crine, how'd they score negative on their global freedom score",
+    parentPostPermalink: 'https://reddit.com/r/teenagers/comments/demo',
+    parentPost: {
+      id: 't3_keyqueue_demo_1',
+      title: "I'm crine, how'd they score negative on their global freedom score",
+      permalink: 'https://reddit.com/r/teenagers/comments/demo',
+      subreddit: 'teenagers',
+      subredditIcon,
+      author: 'sample_author',
+      createdAt: Date.now() - 11 * 60 * 60 * 1000,
+      previewUrl: previewImage,
+      thumbnail: previewImage,
+      score: 46,
+      numComments: 8,
+    },
+  },
+  {
+    id: 't1_chain_2',
+    type: 'comment',
+    title: 'Chain Comment 2',
+    body: 'Chain Comment 2',
+    author: 'eyal282',
+    authorId: 'u_eyal282',
+    subreddit: 'teenagers',
+    subredditIcon,
+    postId: 't3_keyqueue_demo_1',
+    parentId: 't1_chain_1',
+    permalink: 'https://reddit.com/r/teenagers/comments/demo/chain2',
+    createdAt: Date.now() - 4 * 60 * 60 * 1000,
+    reportReasons: ['Harassment'],
+    numReports: 1,
+    score: 1,
+    parentPostTitle: "I'm crine, how'd they score negative on their global freedom score",
+    parentPostPermalink: 'https://reddit.com/r/teenagers/comments/demo',
+    parentPost: {
+      id: 't3_keyqueue_demo_1',
+      title: "I'm crine, how'd they score negative on their global freedom score",
+      permalink: 'https://reddit.com/r/teenagers/comments/demo',
+      subreddit: 'teenagers',
+      subredditIcon,
+      author: 'sample_author',
+      createdAt: Date.now() - 11 * 60 * 60 * 1000,
+      previewUrl: previewImage,
+      thumbnail: previewImage,
+      score: 46,
+      numComments: 8,
+    },
+  },
+  {
     id: 't1_keyqueue_demo_2',
     type: 'comment',
     title: 'Another queued comment that needs review',
@@ -402,6 +466,23 @@ function mergeItem(item: DemoItem) {
   return { ...item, ...modPatches[item.id] };
 }
 
+function buildContextComments(item: QueueItem, byId: Map<string, QueueItem>): QueueItem[] {
+  const chain: QueueItem[] = [];
+  const seen = new Set<string>([item.id]);
+  let parentId = item.parentId;
+
+  while (parentId?.startsWith('t1_')) {
+    if (seen.has(parentId)) break;
+    seen.add(parentId);
+    const parent = byId.get(parentId);
+    if (!parent) break;
+    chain.unshift(parent);
+    parentId = parent.parentId;
+  }
+
+  return chain;
+}
+
 function readJsonBody(req: import('node:http').IncomingMessage): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
@@ -715,59 +796,12 @@ function localApiPlugin(): Plugin {
           return;
         }
         if (url.startsWith('/queue')) {
-          const enriched = queueItems.filter((item) => !removedIds.has(item.id)).map(mergeItem).map((item) => {
-            if (item.type !== 'comment' || !item.postId) return item;
-            const contextComments: QueueItem[] = [
-              {
-                id: `t1_ctx_${item.id}_1`,
-                type: 'comment',
-                title: 'Context reply in the same thread',
-                body: 'I agree with the previous comment, this seems pretty clear-cut.',
-                author: 'thread_regular',
-                authorId: 'u_thread_regular',
-                subreddit: item.subreddit,
-                subredditIcon: item.subredditIcon,
-                postId: item.postId,
-                permalink: `${item.permalink}/ctx1`,
-                createdAt: item.createdAt - 15 * 60 * 1000,
-                reportReasons: [],
-                numReports: 0,
-                score: 5,
-              },
-              {
-                id: `t1_ctx_${item.id}_2`,
-                type: 'comment',
-                title: 'Earlier context comment',
-                body: 'Can we keep this civil? There are teenagers reading these comments.',
-                author: 'voice_of_reason',
-                authorId: 'u_voice_of_reason',
-                subreddit: item.subreddit,
-                subredditIcon: item.subredditIcon,
-                postId: item.postId,
-                permalink: `${item.permalink}/ctx2`,
-                createdAt: item.createdAt - 30 * 60 * 1000,
-                reportReasons: [],
-                numReports: 0,
-                score: 12,
-              },
-              {
-                id: `t1_ctx_${item.id}_3`,
-                type: 'comment',
-                title: 'Reply to the reported comment',
-                body: 'This reply came after the reported comment and may also need review.',
-                author: 'follow_up_user',
-                authorId: 'u_follow_up_user',
-                subreddit: item.subreddit,
-                subredditIcon: item.subredditIcon,
-                postId: item.postId,
-                permalink: `${item.permalink}/ctx3`,
-                createdAt: item.createdAt + 10 * 60 * 1000,
-                reportReasons: ['Incivility'],
-                numReports: 1,
-                score: -2,
-              },
-            ];
-            return { ...item, contextComments };
+          const visible = queueItems.filter((item) => !removedIds.has(item.id)).map(mergeItem);
+          const byId = new Map(visible.map((item) => [item.id, item]));
+          const enriched = visible.map((item) => {
+            if (item.type !== 'comment') return item;
+            const contextComments = buildContextComments(item, byId);
+            return contextComments.length ? { ...item, contextComments } : item;
           });
           json(res, {
             items: enriched,

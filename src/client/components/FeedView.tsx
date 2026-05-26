@@ -47,6 +47,49 @@ export function FeedView({
   return (
     <div className="queue-workspace">
       <aside className="filter-sidebar" aria-label="Feed controls">
+        <section className="sidebar-panel sidebar-panel-queue">
+          <div className="sidebar-panel-toolbar">
+            <h2 className="sidebar-section-title">Feed</h2>
+            <div className="sidebar-toolbar-actions">
+              {state.activePost ? (
+                <button
+                  type="button"
+                  className="sidebar-icon-button"
+                  onClick={feed.closePost}
+                  aria-label="Back to feed"
+                  title="Back to feed"
+                >
+                  <ArrowLeft size={15} />
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="sidebar-icon-button"
+                onClick={feed.refresh}
+                disabled={state.isLoading}
+                aria-label="Refresh feed"
+                title="Refresh feed"
+              >
+                <RefreshCw size={15} className={state.isLoading ? 'spin' : ''} />
+              </button>
+            </div>
+          </div>
+          <nav className="queue-filters" role="tablist" aria-label="Sort feed">
+            {SORTS.map((sort) => (
+              <button
+                key={sort}
+                type="button"
+                role="tab"
+                aria-selected={state.sort === sort}
+                className={state.sort === sort ? 'active' : ''}
+                onClick={() => feed.setSort(sort)}
+              >
+                <span className="queue-filter-label">{sort}</span>
+              </button>
+            ))}
+          </nav>
+        </section>
+
         <RulesSidebar
           rules={rules}
           isLoading={rulesLoading}
@@ -57,37 +100,6 @@ export function FeedView({
           onRuleExpand={onRuleExpand}
           onRemovalModeToggle={onRemovalModeToggle}
         />
-        <div className="filter-sidebar-actions">
-          {state.activePost ? (
-            <button type="button" className="filter-sidebar-refresh" onClick={feed.closePost}>
-              <ArrowLeft size={16} />
-              <span>Feed</span>
-            </button>
-          ) : null}
-          <button
-            type="button"
-            className="filter-sidebar-refresh"
-            onClick={feed.refresh}
-            disabled={state.isLoading}
-          >
-            <RefreshCw size={16} className={state.isLoading ? 'spin' : ''} />
-            <span>Refresh</span>
-          </button>
-          <div className="queue-filters" role="tablist" aria-label="Feed sort">
-            {SORTS.map((s) => (
-              <button
-                key={s}
-                type="button"
-                role="tab"
-                aria-selected={state.sort === s}
-                className={state.sort === s ? 'active' : ''}
-                onClick={() => feed.setSort(s)}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
-        </div>
       </aside>
 
       <section className="queue-list">
@@ -96,6 +108,9 @@ export function FeedView({
             key={item.id}
             item={item}
             index={index}
+            visibleItems={visibleItems}
+            previousItem={index > 0 ? visibleItems[index - 1] : undefined}
+            nextItem={index < visibleItems.length - 1 ? visibleItems[index + 1] : undefined}
             focused={index === state.focusedIndex && state.focusedIndex >= 0}
             selected={state.selectedIds.has(item.id)}
             dragPreviewed={state.dragPreviewIds.has(item.id)}
