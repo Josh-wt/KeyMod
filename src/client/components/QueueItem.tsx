@@ -4,7 +4,7 @@ import type { QueueItem as QueueItemType } from '../../shared';
 import type { ModItemHandlers } from '../modActions';
 import { reportCount } from '../queueReports';
 import { FeedComment } from './FeedComment';
-import { FeedPostCard, feedPostFromItem, feedPostFromParent } from './FeedPostCard';
+import { FeedPostCard, feedPostFromItem, feedPostFromParent, queueItemFromParentPost } from './FeedPostCard';
 import { QueueReportTags } from './QueueReportTags';
 
 type Props = {
@@ -64,16 +64,25 @@ export const QueueItem = memo(function QueueItem({
   const parentPost = item.parentPost;
   const continuesParentThreadAbove = previousItemIsParentThread(previousItem, item);
   const hasReports = reportCount(item) > 0;
+  const showRowReports = isQueueView && hasReports;
   const showPostReports = !isComment && hasReports;
+  const highlightReportedComment = isQueueView && isComment && hasReports;
   const contextComments = item.contextComments;
   const showCommentChain = isQueueView && isComment && contextComments && contextComments.length > 0;
+  const parentPostItem = parentPost ? queueItemFromParentPost(parentPost, item) : null;
+  const parentPostMenuOpen = Boolean(parentPostItem && openContextMenuId === parentPostItem.id);
 
   return (
     <article
-      className={`queue-row${showPostReports ? ' queue-row-reported' : ''}${focused ? ' focused' : ''}${selected ? ' selected' : ''}${dragPreviewed ? ' drag-previewed' : ''}${isComment ? ' queue-row-comment' : ''}${showCommentChain ? ' queue-row-comment-expanded' : ''}`}
+      className={`queue-row${showRowReports ? ' queue-row-reported' : ''}${focused ? ' focused' : ''}${selected ? ' selected' : ''}${dragPreviewed ? ' drag-previewed' : ''}${isComment ? ' queue-row-comment' : ''}${showCommentChain ? ' queue-row-comment-expanded' : ''}`}
       data-queue-id={item.id}
       onMouseDown={(event) => {
-        if ((event.target as Element).closest('[data-mod-trigger], .check-button, .mod-actions-menu-portal, .context-comment-card')) return;
+        if (
+          (event.target as Element).closest(
+            '[data-mod-trigger], .check-button, .mod-actions-menu-portal, .context-comment-card, .comment-expanded-parent, .comment-thread-parent',
+          )
+        )
+          return;
         onDragStart(index);
       }}
       onMouseEnter={() => onFocusIndex(index)}
@@ -99,9 +108,18 @@ export const QueueItem = memo(function QueueItem({
       {isComment ? (
         showCommentChain ? (
           <div className="comment-expanded-view">
-            {parentPost ? (
+            {parentPost && parentPostItem ? (
               <div className="comment-expanded-parent">
-                <FeedPostCard post={feedPostFromParent(parentPost)} variant="embedded" expanded onStop={stop} />
+                <FeedPostCard
+                  post={feedPostFromParent(parentPost)}
+                  item={parentPostItem}
+                  variant="embedded"
+                  expanded
+                  modHandlers={modHandlers}
+                  menuOpen={parentPostMenuOpen}
+                  onMenuOpenChange={(open) => onContextMenuOpenChange?.(open ? parentPostItem.id : null)}
+                  onStop={stop}
+                />
               </div>
             ) : null}
             <div className="comment-chain-section">
@@ -141,12 +159,20 @@ export const QueueItem = memo(function QueueItem({
           <div
             className={`comment-queue-stack${parentPost ? ' comment-queue-stack-threaded' : ''}${parentPost && !continuesParentThreadAbove ? ' comment-queue-stack-detached' : ''}`}
           >
-            {parentPost ? (
+            {parentPost && parentPostItem ? (
               <div className="comment-thread-parent">
                 <div className="comment-thread-gutter" aria-hidden="true" />
                 <div className="crosspost-shell">
                   <span className="crosspost-label">Comment in thread</span>
-                  <FeedPostCard post={feedPostFromParent(parentPost)} variant="embedded" onStop={stop} />
+                  <FeedPostCard
+                    post={feedPostFromParent(parentPost)}
+                    item={parentPostItem}
+                    variant="embedded"
+                    modHandlers={modHandlers}
+                    menuOpen={parentPostMenuOpen}
+                    onMenuOpenChange={(open) => onContextMenuOpenChange?.(open ? parentPostItem.id : null)}
+                    onStop={stop}
+                  />
                 </div>
               </div>
             ) : null}
@@ -154,6 +180,7 @@ export const QueueItem = memo(function QueueItem({
               {parentPost ? <div className="comment-thread-gutter" aria-hidden="true" /> : null}
               <FeedComment
                 item={item}
+                highlighted={highlightReportedComment}
                 modHandlers={modHandlers}
                 menuOpen={menuOpen}
                 onMenuOpenChange={onMenuOpenChange}

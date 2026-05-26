@@ -76,6 +76,30 @@ export function feedPostFromParent(parent: ParentPostContext): FeedPostSource {
   };
 }
 
+/** Minimal queue row for moderating a parent post shown inside a reported comment. */
+export function queueItemFromParentPost(parent: ParentPostContext, comment: QueueItem): QueueItem {
+  return {
+    id: parent.id,
+    type: 'post',
+    title: parent.title,
+    body: parent.body ?? '',
+    author: parent.author ?? '',
+    authorId: '',
+    subreddit: parent.subreddit,
+    permalink: parent.permalink,
+    createdAt: parent.createdAt ?? comment.createdAt,
+    reportReasons: [],
+    numReports: 0,
+    score: parent.score,
+    numComments: parent.numComments,
+    thumbnail: parent.thumbnail,
+    previewUrl: parent.previewUrl,
+    url: parent.url,
+    domain: parent.domain,
+    subredditIcon: parent.subredditIcon,
+  };
+}
+
 export function FeedPostCard({
   post,
   item,
@@ -90,7 +114,7 @@ export function FeedPostCard({
 }: Props) {
   const hostRef = useRef<HTMLElement>(null);
   const embedded = variant === 'embedded';
-  const showModActions = !embedded && item && modHandlers && onMenuOpenChange;
+  const showModActions = Boolean(item && modHandlers && onMenuOpenChange);
   const image = mediaUrl(post.previewUrl, post.thumbnail);
   const shouldShowLink =
     !image && Boolean(post.url && post.domain && post.url !== post.permalink && !post.url.includes('/comments/'));
@@ -98,7 +122,7 @@ export function FeedPostCard({
   return (
     <article
       ref={hostRef}
-      className={`feed-post${embedded ? ' feed-post-embedded' : ''}${expanded ? ' feed-post-expanded' : ''}${showModActions ? ' feed-post-with-mod' : ''}`}
+      className={`feed-post${embedded ? ' feed-post-embedded' : ''}${expanded ? ' feed-post-expanded' : ''}${showModActions ? ' feed-post-with-mod' : ''}${embedded && showModActions ? ' feed-post-embedded-moderatable' : ''}`}
     >
       <header className="feed-post-header">
         <div className="subreddit-avatar" data-has-icon={Boolean(post.subredditIcon)}>
@@ -144,29 +168,31 @@ export function FeedPostCard({
 
       {!embedded && post.body ? <p className="feed-post-body">{post.body}</p> : null}
 
-      {!embedded ? (
+      {!embedded || showModActions ? (
         <footer className="feed-post-actions">
-          <div className="public-actions" aria-label="Post engagement">
-            <span className="vote-pill">
-              <ArrowBigUp size={18} />
-              {compactNumber(post.score)}
-              <ArrowBigDown size={18} />
-            </span>
-            <button
-              type="button"
-              className="public-action-button"
-              onMouseDown={(event) => stop(event, onStop)}
-              onClick={(event) => {
-                stop(event, onStop);
-                if (item) onOpenComments?.(item);
-              }}
-              disabled={!item || !onOpenComments}
-            >
-              <MessageCircle size={16} />
-              {compactNumber(post.numComments)}
-            </button>
-          </div>
-          {showModActions ? (
+          {!embedded ? (
+            <div className="public-actions" aria-label="Post engagement">
+              <span className="vote-pill">
+                <ArrowBigUp size={18} />
+                {compactNumber(post.score)}
+                <ArrowBigDown size={18} />
+              </span>
+              <button
+                type="button"
+                className="public-action-button"
+                onMouseDown={(event) => stop(event, onStop)}
+                onClick={(event) => {
+                  stop(event, onStop);
+                  if (item) onOpenComments?.(item);
+                }}
+                disabled={!item || !onOpenComments}
+              >
+                <MessageCircle size={16} />
+                {compactNumber(post.numComments)}
+              </button>
+            </div>
+          ) : null}
+          {showModActions && item && modHandlers && onMenuOpenChange ? (
             <ModActions
               item={item}
               menuOpen={menuOpen}
