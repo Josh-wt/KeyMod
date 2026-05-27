@@ -1,5 +1,10 @@
 export type QueueKind = 'post' | 'comment';
 
+/** Content type for subreddit posts (mod queue filtering). */
+export type PostMediaKind = 'text' | 'image' | 'video';
+
+export type QueuePostKindFilter = 'all' | PostMediaKind;
+
 export type CrowdControlLevel = 'OFF' | 'LENIENT' | 'MEDIUM' | 'STRICT';
 
 export type ParentPostContext = {
@@ -36,6 +41,8 @@ export type QueueItem = {
   flairText?: string;
   thumbnail?: string;
   previewUrl?: string;
+  /** Text / image / video classification for posts. */
+  postMediaKind?: PostMediaKind;
   url?: string;
   domain?: string;
   subredditIcon?: string;

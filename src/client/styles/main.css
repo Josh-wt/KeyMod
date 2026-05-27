@@ -2521,6 +2521,23 @@ kbd {
     font-size: 12px;
   }
 
+  .queue-post-kind-filters {
+    display: flex;
+    flex-flow: row nowrap;
+    gap: 4px;
+    overflow-x: auto;
+    padding: 4px;
+    border-top: 0;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .queue-post-kind-filters button {
+    flex: 0 0 auto;
+    min-width: max-content;
+    min-height: 30px;
+    padding: 5px 9px;
+  }
+
   .queue-list {
     min-height: 0;
   }

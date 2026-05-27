@@ -5,6 +5,7 @@ import type { MenuItemRequest, TriggerResponse, UiResponse } from '@devvit/web/s
 import { Hono } from 'hono';
 import { attributeModAction, attributeUserModAction, removalAttributionSummary } from './actingModerator';
 import { resolveSettings } from '../settings';
+import { bodyFromRaw, postMediaKindFromRaw, previewUrlFromRaw } from './postNormalize';
 import type {
   AutomodPanelData,
   AutomodValidation,
@@ -119,33 +120,6 @@ function decodePreviewUrl(value: string): string {
   return value.replace(/&amp;/g, '&');
 }
 
-function previewUrlFromRaw(raw: JsonRecord): string {
-  const preview = raw.preview as JsonRecord | undefined;
-  const images = preview?.images as unknown[] | undefined;
-  const first = images?.[0] as JsonRecord | undefined;
-  const source = first?.source as JsonRecord | undefined;
-  const previewSource = maybeUrl(source?.url);
-  if (previewSource) return decodePreviewUrl(previewSource);
-
-  const gallery = raw.gallery as JsonRecord | undefined;
-  const galleryItems = gallery?.items as unknown[] | undefined;
-  const galleryMedia = (galleryItems?.[0] as JsonRecord | undefined)?.media as JsonRecord | undefined;
-  const galleryStill = galleryMedia?.s as JsonRecord | undefined;
-  const galleryUrl = maybeUrl(galleryMedia?.url ?? galleryStill?.u);
-  if (galleryUrl) return decodePreviewUrl(galleryUrl);
-
-  const overridden = maybeUrl(raw.url_overridden_by_dest);
-  if (overridden && /\.(gif|jpe?g|png|webp)$/i.test(overridden)) return overridden;
-
-  const directUrl = maybeUrl(raw.url);
-  if (directUrl && /\.(gif|jpe?g|png|webp)$/i.test(directUrl)) return directUrl;
-
-  const thumb = maybeUrl(raw.thumbnailUrl ?? raw.thumbnail);
-  if (thumb && !['self', 'default', 'nsfw', 'spoiler', 'image'].includes(thumb)) return thumb;
-
-  return '';
-}
-
 function postIdFromRaw(raw: JsonRecord): string {
   const direct = stringValue(raw.postId ?? raw.linkId ?? raw.link_id);
   if (direct.startsWith('t3_')) return direct;
@@ -197,7 +171,7 @@ function normalizeParentPost(rawValue: unknown, fallbackSubreddit = '', subreddi
     subreddit,
     author: String(raw.authorName ?? (typeof author === 'object' ? author.username : author) ?? ''),
     createdAt: toTimestamp(raw.createdAt ?? raw.created_utc),
-    body: String(raw.body ?? raw.selftext ?? ''),
+    body: bodyFromRaw(raw),
     score: Number(raw.score ?? raw.ups ?? 0),
     numComments: Number(raw.numberOfComments ?? raw.numComments ?? raw.num_comments ?? 0),
     thumbnail: thumbnail || undefined,
@@ -211,7 +185,7 @@ function normalizeParentPost(rawValue: unknown, fallbackSubreddit = '', subreddi
 function normalizeThing(rawValue: unknown, fallbackSubreddit = ''): QueueItem {
   const raw = ((rawValue as JsonRecord)?.data ?? rawValue) as JsonRecord;
   const id = thingIdFromRaw(raw);
-  const body = String(raw.body ?? raw.selftext ?? '');
+  const body = bodyFromRaw(raw);
   const type = id.startsWith('t1_') || (body && !raw.title) ? 'comment' : 'post';
   const reportReasons = getReportReasons(raw);
   const url = maybeUrl(raw.url);
@@ -221,6 +195,7 @@ function normalizeThing(rawValue: unknown, fallbackSubreddit = ''): QueueItem {
   const parentPostPermalink = stringValue(raw.linkPermalink ?? raw.postPermalink ?? raw.parentPostPermalink);
   const postId = type === 'comment' ? postIdFromRaw(raw) : id;
   const author = raw.author as JsonRecord | string | undefined;
+  const postMediaKind = type === 'post' ? postMediaKindFromRaw(raw, previewUrl, thumbnail) : undefined;
 
   return {
     id,
@@ -241,6 +216,7 @@ function normalizeThing(rawValue: unknown, fallbackSubreddit = ''): QueueItem {
     flairText: flairText(raw),
     thumbnail: thumbnail || undefined,
     previewUrl: previewUrl || undefined,
+    postMediaKind,
     url,
     domain: domainFromUrl(url || raw.permalink),
     postId: postId || undefined,

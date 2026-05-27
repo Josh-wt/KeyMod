@@ -1,5 +1,5 @@
 import { MessageCircle, RefreshCw } from 'lucide-react';
-import type { QueueFilter, SubredditRule } from '../../shared';
+import type { PostMediaKind, QueueFilter, QueuePostKindFilter, SubredditRule } from '../../shared';
 import { RulesSidebar } from './RulesSidebar';
 
 type Stats = {
@@ -9,11 +9,16 @@ type Stats = {
   reported: number;
 };
 
+type PostKindStats = Record<PostMediaKind, number>;
+
 type Props = {
   filter: QueueFilter;
+  postKindFilter: QueuePostKindFilter;
   stats: Stats;
+  postKindStats: PostKindStats;
   isLoading: boolean;
   onFilterChange: (filter: QueueFilter) => void;
+  onPostKindFilterChange: (filter: QueuePostKindFilter) => void;
   onRefresh: () => void;
   onNextComment?: () => void;
   rules: SubredditRule[];
@@ -33,11 +38,21 @@ const filters: Array<{ id: QueueFilter; label: string; count: (stats: Stats) => 
   { id: 'reported', label: 'Reported', count: (s) => s.reported },
 ];
 
+const postKindFilters: Array<{ id: QueuePostKindFilter; label: string; count: (stats: PostKindStats) => number }> = [
+  { id: 'all', label: 'All posts', count: (s) => s.text + s.image + s.video },
+  { id: 'text', label: 'Text', count: (s) => s.text },
+  { id: 'image', label: 'Image', count: (s) => s.image },
+  { id: 'video', label: 'Video', count: (s) => s.video },
+];
+
 export function QueueToolbar({
   filter,
+  postKindFilter,
   stats,
+  postKindStats,
   isLoading,
   onFilterChange,
+  onPostKindFilterChange,
   onRefresh,
   onNextComment,
   rules,
@@ -92,6 +107,25 @@ export function QueueToolbar({
             </button>
           ))}
         </nav>
+
+        {filter !== 'comments' ? (
+          <nav className="queue-post-kind-filters" role="tablist" aria-label="Filter posts by type">
+            {postKindFilters.map((entry) => (
+              <button
+                key={entry.id}
+                type="button"
+                role="tab"
+                aria-selected={postKindFilter === entry.id}
+                className={postKindFilter === entry.id ? 'active' : ''}
+                data-post-kind={entry.id}
+                onClick={() => onPostKindFilterChange(entry.id)}
+              >
+                <span className="queue-filter-label">{entry.label}</span>
+                <span className="queue-filter-count">{entry.count(postKindStats)}</span>
+              </button>
+            ))}
+          </nav>
+        ) : null}
       </section>
 
       <RulesSidebar
