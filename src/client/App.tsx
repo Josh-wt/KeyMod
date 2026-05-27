@@ -569,9 +569,12 @@ export default function App() {
           <div className="queue-workspace">
             <QueueToolbar
               filter={queue.state.filter}
+              postKindFilter={queue.state.postKindFilter}
               stats={queue.stats}
+              postKindStats={queue.postKindStats}
               isLoading={queue.state.isLoading}
               onFilterChange={queue.setFilter}
+              onPostKindFilterChange={queue.setPostKindFilter}
               onRefresh={queue.refresh}
               onNextComment={scrollToNextComment}
               rules={subredditRules}

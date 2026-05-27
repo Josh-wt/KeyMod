@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from './api';
-import { filterQueueItems, queueStats } from './queueFilter';
-import type { QueueFilter, QueueItem } from '../shared';
+import { filterQueueItems, queuePostKindStats, queueStats } from './queueFilter';
+import type { QueueFilter, QueueItem, QueuePostKindFilter } from '../shared';
+
+function visibleQueueItems(items: QueueItem[], filter: QueueFilter, postKindFilter: QueuePostKindFilter) {
+  return filterQueueItems(items, filter, postKindFilter);
+}
 
 export type QueueState = {
   items: QueueItem[];
   filter: QueueFilter;
+  postKindFilter: QueuePostKindFilter;
   focusedIndex: number;
   selectedIds: Set<string>;
   isDragging: boolean;
@@ -21,6 +26,7 @@ export function useQueue(addToast: (message: string, kind?: 'info' | 'warning' |
   const [state, setState] = useState<QueueState>({
     items: [],
     filter: 'all',
+    postKindFilter: 'all',
     focusedIndex: 0,
     selectedIds: new Set(),
     isDragging: false,
@@ -32,8 +38,12 @@ export function useQueue(addToast: (message: string, kind?: 'info' | 'warning' |
     isLoading: true,
   });
 
-  const visibleItems = useMemo(() => filterQueueItems(state.items, state.filter), [state.filter, state.items]);
+  const visibleItems = useMemo(
+    () => visibleQueueItems(state.items, state.filter, state.postKindFilter),
+    [state.filter, state.items, state.postKindFilter],
+  );
   const stats = useMemo(() => queueStats(state.items), [state.items]);
+  const postKindStats = useMemo(() => queuePostKindStats(state.items), [state.items]);
 
   const load = useCallback(
     async (after?: string | null) => {
@@ -94,7 +104,7 @@ export function useQueue(addToast: (message: string, kind?: 'info' | 'warning' |
 
   const moveFocus = useCallback((direction: 1 | -1) => {
     setState((current) => {
-      const items = filterQueueItems(current.items, current.filter);
+      const items = visibleQueueItems(current.items, current.filter, current.postKindFilter);
       return {
         ...current,
         focusedIndex: clampFocus(current.focusedIndex + direction, items.length),
@@ -104,7 +114,7 @@ export function useQueue(addToast: (message: string, kind?: 'info' | 'warning' |
 
   const focusIndex = useCallback((index: number) => {
     setState((current) => {
-      const items = filterQueueItems(current.items, current.filter);
+      const items = visibleQueueItems(current.items, current.filter, current.postKindFilter);
       return { ...current, focusedIndex: clampFocus(index, items.length) };
     });
   }, []);
@@ -114,7 +124,21 @@ export function useQueue(addToast: (message: string, kind?: 'info' | 'warning' |
   }, []);
 
   const setFilter = useCallback((filter: QueueFilter) => {
-    setState((current) => ({ ...current, filter, focusedIndex: 0 }));
+    setState((current) => ({
+      ...current,
+      filter,
+      postKindFilter: filter === 'comments' ? 'all' : current.postKindFilter,
+      focusedIndex: 0,
+    }));
+  }, []);
+
+  const setPostKindFilter = useCallback((postKindFilter: QueuePostKindFilter) => {
+    setState((current) => ({
+      ...current,
+      postKindFilter,
+      filter: postKindFilter === 'all' ? current.filter : current.filter === 'comments' ? 'posts' : current.filter,
+      focusedIndex: 0,
+    }));
   }, []);
 
   const toggleSelected = useCallback((id: string) => {
@@ -128,7 +152,7 @@ export function useQueue(addToast: (message: string, kind?: 'info' | 'warning' |
 
   const toggleFocused = useCallback(() => {
     setState((current) => {
-      const item = filterQueueItems(current.items, current.filter)[current.focusedIndex];
+      const item = visibleQueueItems(current.items, current.filter, current.postKindFilter)[current.focusedIndex];
       if (!item) return current;
       const selectedIds = new Set(current.selectedIds);
       if (selectedIds.has(item.id)) selectedIds.delete(item.id);
@@ -140,7 +164,7 @@ export function useQueue(addToast: (message: string, kind?: 'info' | 'warning' |
   const selectAllVisible = useCallback(() => {
     setState((current) => {
       const selectedIds = new Set(current.selectedIds);
-      filterQueueItems(current.items, current.filter).forEach((item) => selectedIds.add(item.id));
+      visibleQueueItems(current.items, current.filter, current.postKindFilter).forEach((item) => selectedIds.add(item.id));
       return { ...current, selectedIds };
     });
   }, []);
@@ -172,7 +196,7 @@ export function useQueue(addToast: (message: string, kind?: 'info' | 'warning' |
     setState((current) => {
       if (!current.isDragging || current.dragStartIndex === null) return current;
       if (index === current.dragStartIndex) return current;
-      const items = filterQueueItems(current.items, current.filter);
+      const items = visibleQueueItems(current.items, current.filter, current.postKindFilter);
       const [start, end] = [current.dragStartIndex, index].sort((a, b) => a - b);
       const dragPreviewIds = new Set<string>();
       items.slice(start, end + 1).forEach((item) => dragPreviewIds.add(item.id));
@@ -194,7 +218,7 @@ export function useQueue(addToast: (message: string, kind?: 'info' | 'warning' |
   const dismissIds = useCallback((ids: string[]) => {
     setState((current) => {
       const nextItems = current.items.filter((item) => !ids.includes(item.id));
-      const items = filterQueueItems(nextItems, current.filter);
+      const items = visibleQueueItems(nextItems, current.filter, current.postKindFilter);
       return {
         ...current,
         items: nextItems,
@@ -208,7 +232,7 @@ export function useQueue(addToast: (message: string, kind?: 'info' | 'warning' |
   const markRemoved = useCallback((ids: string[], batchId: string) => {
     setState((current) => {
       const nextItems = current.items.filter((item) => !ids.includes(item.id));
-      const items = filterQueueItems(nextItems, current.filter);
+      const items = visibleQueueItems(nextItems, current.filter, current.postKindFilter);
       return {
         ...current,
         items: nextItems,
@@ -250,7 +274,7 @@ export function useQueue(addToast: (message: string, kind?: 'info' | 'warning' |
       const restored = items.filter((item) => !existing.has(item.id));
       if (!restored.length) return { ...current, undoCountdown: null, lastBatchId: null };
       const merged = [...current.items, ...restored].sort((a, b) => b.createdAt - a.createdAt);
-      const visible = filterQueueItems(merged, current.filter);
+      const visible = visibleQueueItems(merged, current.filter, current.postKindFilter);
       return {
         ...current,
         items: merged,
@@ -265,11 +289,13 @@ export function useQueue(addToast: (message: string, kind?: 'info' | 'warning' |
     state,
     visibleItems,
     stats,
+    postKindStats,
     focused,
     targetIds,
     load,
     refresh,
     setFilter,
+    setPostKindFilter,
     moveFocus,
     focusIndex,
     toggleSelected,
