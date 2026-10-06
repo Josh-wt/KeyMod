@@ -61,11 +61,18 @@ export type QueueItem = {
   ignoringReports?: boolean;
   contextComments?: QueueItem[];
   lastRemovalReasonLabel?: string;
+  locallyRemoved?: boolean;
 };
 
 export type QueueFilter = 'all' | 'posts' | 'comments' | 'reported';
 
 export type FeedSort = 'hot' | 'new' | 'top';
+
+export type ThreadData = {
+  post: QueueItem;
+  comments: QueueItem[];
+  focusedId: string;
+};
 
 export type KeyAction =
   | 'approve'
@@ -108,18 +115,9 @@ export type SubredditRule = {
   priority: number;
 };
 
-export type BanReason = {
-  index: number;
-  reason: string;
-  message: string;
-  note: string;
-  duration: number;
-};
-
 export type AppSettings = {
   keymap: Keymap;
   removalReasons: RemovalReason[];
-  banReasons: BanReason[];
   conflicts: Array<{ key: string; actions: string[] }>;
 };
 
@@ -184,6 +182,26 @@ export type ModLogMatrix = {
     sevenDays: number;
     thirtyDays: number;
   }>;
+};
+
+export type CommentRemovalEvent = {
+  id: string;
+  batchId: string;
+  commentId: string;
+  author: string;
+  permalink: string;
+  moderator: string;
+  removedAt: number;
+  reason: string;
+  asSpam: boolean;
+  restoredAt?: number;
+  restoredBy?: string;
+};
+
+export type RemovalLeaderboard = {
+  subreddit: string;
+  rows: Array<{ moderator: string; removals: number }>;
+  recent: CommentRemovalEvent[];
 };
 
 export type AutomodFilterEvent = {

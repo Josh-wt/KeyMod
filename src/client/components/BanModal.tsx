@@ -28,17 +28,23 @@ export function BanModal({ username, onCancel, onSubmit }: Props) {
   }, [onCancel, onSubmit, reason, selected]);
 
   return (
-    <div className="modal-backdrop">
+    <div
+      className="modal-backdrop"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onCancel();
+      }}
+    >
       <section className="modal">
         <h2>Ban u/{username}</h2>
         <div className="duration-grid">
           {durations.map((duration, index) => (
             <button
               key={duration.label}
+              type="button"
               className={selected === index + 1 ? 'active' : ''}
               onClick={() => setSelected(index + 1)}
             >
-              [{index + 1}] {duration.label}
+              <kbd>{index + 1}</kbd> {duration.label}
             </button>
           ))}
         </div>
@@ -46,6 +52,14 @@ export function BanModal({ username, onCancel, onSubmit }: Props) {
           Reason
           <input autoFocus value={reason} onChange={(event) => setReason(event.target.value)} />
         </label>
+        <div className="modal-actions">
+          <button type="button" onClick={onCancel}>
+            Cancel
+          </button>
+          <button type="button" className="primary danger" onClick={() => onSubmit(durations[selected - 1].value, reason)}>
+            Ban u/{username}
+          </button>
+        </div>
         <div className="modal-hints">Enter to confirm · Esc to cancel</div>
       </section>
     </div>

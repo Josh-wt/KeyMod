@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from './api';
 import { actionForKey, isUndoKey } from './keyBinding';
 import { DEFAULT_KEYMAP, detectKeyConflicts } from '../settings';
@@ -16,7 +16,6 @@ export function useKeymap(
   const [settings, setSettings] = useState<AppSettings>({
     keymap: DEFAULT_KEYMAP,
     removalReasons: Array.from({ length: 9 }, (_, index) => ({ index: index + 1, text: '', flairId: '' })),
-    banReasons: Array.from({ length: 9 }, (_, index) => ({ index: index + 1, reason: '', message: '', note: '', duration: 0 })),
     conflicts: [],
   });
 
@@ -36,16 +35,23 @@ export function useKeymap(
       });
   }, [addToast]);
 
-  useEffect(() => {
-    let banChordActive = false;
-    let banChordTimer: number | null = null;
+  // Refs, not effect locals: the chord toast re-renders the app and re-runs the keydown effect.
+  const banChordActiveRef = useRef(false);
+  const banChordTimerRef = useRef<number | null>(null);
 
+  useEffect(() => {
+    return () => {
+      if (banChordTimerRef.current !== null) window.clearTimeout(banChordTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
     function armBanChord() {
-      banChordActive = true;
-      if (banChordTimer !== null) window.clearTimeout(banChordTimer);
-      banChordTimer = window.setTimeout(() => {
-        banChordActive = false;
-        banChordTimer = null;
+      banChordActiveRef.current = true;
+      if (banChordTimerRef.current !== null) window.clearTimeout(banChordTimerRef.current);
+      banChordTimerRef.current = window.setTimeout(() => {
+        banChordActiveRef.current = false;
+        banChordTimerRef.current = null;
       }, 2500);
     }
 
@@ -65,12 +71,12 @@ export function useKeymap(
         return;
       }
 
-      if (banChordActive && e.key >= '1' && e.key <= '9') {
+      if (banChordActiveRef.current && e.key >= '1' && e.key <= '9') {
         e.preventDefault();
-        banChordActive = false;
-        if (banChordTimer !== null) {
-          window.clearTimeout(banChordTimer);
-          banChordTimer = null;
+        banChordActiveRef.current = false;
+        if (banChordTimerRef.current !== null) {
+          window.clearTimeout(banChordTimerRef.current);
+          banChordTimerRef.current = null;
         }
         handleBanReason(parseInt(e.key, 10));
         return;
@@ -95,11 +101,8 @@ export function useKeymap(
       }
     }
 
-    window.addEventListener('keydown', onKeyDown);
-    return () => {
-      window.removeEventListener('keydown', onKeyDown);
-      if (banChordTimer !== null) window.clearTimeout(banChordTimer);
-    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
   }, [addToast, dispatch, handleBanReason, handleRemove, isModalOpen, onClearSelection, settings.keymap, undoAvailable]);
 
   return settings;

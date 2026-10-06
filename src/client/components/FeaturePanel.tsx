@@ -1,4 +1,5 @@
-import { Bell, FileText, ListChecks, NotebookPen, ShieldCheck, Table2 } from 'lucide-react';
+import { Bell, FileText, ListChecks, NotebookPen, ShieldCheck, Table2, Trophy } from 'lucide-react';
+import { RemovalLeaderboardPanel } from './RemovalLeaderboardPanel';
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import type {
@@ -11,7 +12,7 @@ import type {
   UserInfo,
 } from '../../shared';
 
-export type FeaturePanelKind = 'notes' | 'reasons' | 'queue-tools' | 'notifications' | 'mod-log' | 'automod';
+export type FeaturePanelKind = 'notes' | 'reasons' | 'queue-tools' | 'notifications' | 'mod-log' | 'automod' | 'leaderboard';
 
 type Props = {
   kind: FeaturePanelKind;
@@ -19,6 +20,7 @@ type Props = {
   removalReasons: RemovalReason[];
   userInfo: UserInfo | null;
   selectedCount: number;
+  subreddit: string;
   onClose: () => void;
 };
 
@@ -29,6 +31,7 @@ const titles: Record<FeaturePanelKind, string> = {
   notifications: 'Notifications',
   'mod-log': 'Mod Log Matrix',
   automod: 'AutoMod',
+  leaderboard: 'Removal Leaderboard',
 };
 
 const icons = {
@@ -38,9 +41,10 @@ const icons = {
   notifications: Bell,
   'mod-log': Table2,
   automod: ShieldCheck,
+  leaderboard: Trophy,
 } as const;
 
-export function FeaturePanel({ kind, focused, removalReasons, userInfo, selectedCount, onClose }: Props) {
+export function FeaturePanel({ kind, focused, removalReasons, userInfo, selectedCount, subreddit, onClose }: Props) {
   const Icon = icons[kind];
   const [notifications, setNotifications] = useState<NotificationCounts | null>(null);
   const [modLog, setModLog] = useState<ModLogMatrix | null>(null);
@@ -74,6 +78,8 @@ export function FeaturePanel({ kind, focused, removalReasons, userInfo, selected
           x
         </button>
       </header>
+
+      {kind === 'leaderboard' ? <RemovalLeaderboardPanel subreddit={subreddit} /> : null}
 
       {kind === 'notes' ? (
         <section>

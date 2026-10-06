@@ -51,7 +51,10 @@ export function UndoToast({ count, reason, reasonIndex, countdown, onUndo, onDon
           <span className="undo-reason-label">{reason || 'No reason'}</span>
         </span>
       </div>
-      <button onClick={onUndo}>Backspace to undo</button>
+      <button type="button" onClick={onUndo}>
+        <span className="undo-label-key">Backspace to undo</span>
+        <span className="undo-label-touch">Undo</span>
+      </button>
       <strong>{remaining}s</strong>
     </div>
   );

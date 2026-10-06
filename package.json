@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "tsc --noEmit && vite build --config vite.devvit.config.ts",
+    "build": "tsc --noEmit && tsc --noEmit -p tsconfig.client.json && vite build --config vite.devvit.config.ts",
+    "test": "node tests/run.mjs",
     "preview": "vite preview --host 0.0.0.0",
     "devvit:upload": "devvit upload",
     "devvit:playtest": "devvit playtest"
@@ -18,7 +19,9 @@
     "hono": "^4.7.4",
     "lucide-react": "^0.468.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@devvit/start": "^0.12.23",

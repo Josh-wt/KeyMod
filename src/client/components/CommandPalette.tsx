@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Bell, FileText, ListChecks, NotebookPen, Search, ShieldCheck, Table2, Wrench } from 'lucide-react';
+import { Bell, FileText, ListChecks, NotebookPen, Search, ShieldCheck, Table2, Wrench, Trophy } from 'lucide-react';
 
 export type Command = {
   id: string;
   title: string;
   subtitle: string;
-  section: 'User Notes' | 'Removal Reasons' | 'Queue Tools' | 'Notifications' | 'Mod Log Matrix' | 'AutoMod';
+  section: 'User Notes' | 'Removal Reasons' | 'Queue Tools' | 'Notifications' | 'Mod Log Matrix' | 'AutoMod' | 'Removal Leaderboard';
   keywords: string[];
   run: () => void;
 };
@@ -17,6 +17,7 @@ const iconBySection = {
   Notifications: Bell,
   'Mod Log Matrix': Table2,
   AutoMod: ShieldCheck,
+  'Removal Leaderboard': Trophy,
 } as const;
 
 type Props = {

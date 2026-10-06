@@ -3,9 +3,12 @@ import { context as requestContext, createServer, getServerPort, reddit, redis, 
 import type { TaskRequest, TaskResponse } from '@devvit/scheduler';
 import type { MenuItemRequest, TriggerResponse, UiResponse } from '@devvit/web/shared';
 import { Hono } from 'hono';
-import { attributeModAction, attributeUserModAction, removalAttributionSummary } from './actingModerator';
+import { attributeModAction, attributeUserModAction, getActingModeratorUsername, removalAttributionSummary } from './actingModerator';
+import { recordCommentRemoval, restoreTrackedComment, readRemovalLeaderboard } from './removalTracking';
 import { resolveSettings } from '../settings';
 import { bodyFromRaw, postMediaKindFromRaw, previewUrlFromRaw } from './postNormalize';
+import { readThread, ThreadError } from './thread';
+import { hostPostFallback, hostPostWebUrl } from './hostPostFallback';
 import type {
   AutomodPanelData,
   AutomodValidation,
@@ -298,8 +301,17 @@ async function fetchSidebarRules(): Promise<SubredditRule[]> {
   }
 
   try {
-    const rules = await reddit.getRules(subredditName);
-    return rules.map((rule, index) =>
+    return await fetchSubredditRules();
+  } catch {
+    return [];
+  }
+}
+
+async function fetchSubredditRules(): Promise<SubredditRule[]> {
+  const subredditName = getSubredditName();
+  const rules = await reddit.getRules(subredditName);
+  return rules
+    .map((rule, index) =>
       toSubredditRule(subredditName, {
         id: `${subredditName}:${rule.priority}:${rule.shortName}`,
         shortName: rule.shortName,
@@ -308,10 +320,8 @@ async function fetchSidebarRules(): Promise<SubredditRule[]> {
         violationReason: rule.violationReason,
         priority: rule.priority ?? index,
       }),
-    );
-  } catch {
-    return [];
-  }
+    )
+    .sort((a, b) => a.priority - b.priority);
 }
 
 function normalizeRemovalReasonLabel(value: string | undefined) {
@@ -753,7 +763,6 @@ function normalizeModLogEntry(rawValue: unknown): UserModLogEntry {
 }
 
 const HOST_POST_TITLE = 'KeyModerator';
-const HOST_POST_FALLBACK_TEXT = 'Open this post in the Reddit app or on new Reddit to use KeyModerator.';
 const HOST_POST_USER_TEXT = 'KeyModerator moderator workspace.';
 
 async function submitHostPost(subredditName: string, runAs: 'APP' | 'USER') {
@@ -762,7 +771,7 @@ async function submitHostPost(subredditName: string, runAs: 'APP' | 'USER') {
     title: HOST_POST_TITLE,
     entry: 'default',
     textFallback: {
-      text: HOST_POST_FALLBACK_TEXT,
+      text: hostPostFallback(subredditName),
     },
   };
 
@@ -784,9 +793,14 @@ async function submitHostPost(subredditName: string, runAs: 'APP' | 'USER') {
 }
 
 function getPostUrl(post: Awaited<ReturnType<typeof reddit.submitCustomPost>>): string {
-  const url = post.url ?? post.permalink;
-  if (!url) throw new Error('Created KeyModerator host post did not include a URL.');
-  return url;
+  return hostPostWebUrl(post.id);
+}
+
+async function repairHostPostFallback(post: Awaited<ReturnType<typeof reddit.getPostById>>, subredditName: string): Promise<void> {
+  const versionKey = `host-post-fallback:v2:${post.id}`;
+  if (await redis.get(versionKey)) return;
+  await post.setTextFallback({ text: hostPostFallback(subredditName, post.id) });
+  await redis.set(versionKey, 'updated');
 }
 
 function errorMessage(error: unknown): string {
@@ -800,8 +814,12 @@ async function getOrCreateHostPost(): Promise<{ url: string }> {
 
   if (existingId) {
     const existing = await reddit.getPostById(existingId as never).catch(() => null);
-    const existingUrl = existing?.url ?? existing?.permalink;
-    if (existingUrl) return { url: existingUrl };
+    if (existing) {
+      await repairHostPostFallback(existing, subredditName).catch((error) => {
+        console.warn('[keymoderator] host post fallback update failed', error);
+      });
+      return { url: getPostUrl(existing) };
+    }
   }
 
   let post: Awaited<ReturnType<typeof reddit.submitCustomPost>>;
@@ -820,6 +838,9 @@ async function getOrCreateHostPost(): Promise<{ url: string }> {
   }
 
   if (post.id) await redis.set(key, post.id);
+  await repairHostPostFallback(post, subredditName).catch((error) => {
+    console.warn('[keymoderator] host post fallback update failed', error);
+  });
   return { url: getPostUrl(post) };
 }
 
@@ -871,6 +892,16 @@ app.post('/internal/triggers/automod-filter', async (c) => {
   return c.json({} satisfies TriggerResponse);
 });
 
+app.post('/internal/triggers/repair-host-fallback', async (c) => {
+  const subredditName = getSubredditName();
+  const hostPostId = await redis.get(`host-post:${subredditName}`);
+  if (hostPostId) {
+    const post = await reddit.getPostById(hostPostId as never);
+    await repairHostPostFallback(post, subredditName);
+  }
+  return c.json({} satisfies TriggerResponse);
+});
+
 app.use('/api/*', async (c, next) => {
   try {
     await assertModerator();
@@ -883,6 +914,8 @@ app.use('/api/*', async (c, next) => {
 app.get('/api/settings', async (c) => c.json(await resolveSettings(settings)));
 
 app.get('/api/subreddit-rules', async (c) => c.json({ rules: await fetchSidebarRules() }));
+
+app.get('/api/ban-rules', async (c) => c.json({ rules: await fetchSubredditRules() }));
 
 app.get('/api/feed', async (c) => {
   const subredditName = getSubredditName();
@@ -918,6 +951,30 @@ app.get('/api/feed/:postId/comments', async (c) => {
   });
 });
 
+app.post('/api/thread', async (c) => {
+  const body = await c.req.json<{ link?: unknown }>().catch(() => null);
+  if (typeof body?.link !== 'string' || body.link.length > 2048) {
+    return c.json({ error: 'Provide a Reddit thread link.' }, 400);
+  }
+  const subreddit = getSubredditName();
+  try {
+    const data = await readThread(body.link, subreddit, {
+      post: async (id) => normalizeThing(await reddit.getPostById(id as never), subreddit),
+      comment: async (id) => normalizeThing(await reddit.getCommentById(id as never), subreddit),
+      comments: async (postId) => (await commentTreeItems(
+        reddit.getComments({ postId: postId as never, pageSize: 100, depth: 10 }),
+      )).map((comment) => normalizeThing(comment, subreddit)),
+    });
+    const icon = await getSubredditIcon(subreddit);
+    return c.json({ ...data, post: { ...data.post, subredditIcon: icon },
+      comments: data.comments.map((comment) => ({ ...comment, subredditIcon: icon })) });
+  } catch (error) {
+    if (error instanceof ThreadError) return c.json({ error: error.message }, error.status);
+    console.error('[keymoderator] thread lookup failed', error);
+    return c.json({ error: 'Could not load this thread. Please try again.' }, 502);
+  }
+});
+
 app.get('/api/queue', async (c) => {
   const subredditName = getSubredditName();
   const after = c.req.query('after') || undefined;
@@ -942,6 +999,8 @@ app.post('/api/remove', async (c) => {
       batchId?: string;
     }>();
   const subredditName = getSubredditName();
+  const moderator = await getActingModeratorUsername();
+  if (!moderator) return c.json({ error: 'The acting moderator could not be identified.' }, 403);
   const batchId =
     typeof requestedBatchId === 'string' && requestedBatchId.length > 0 ? requestedBatchId : crypto.randomUUID();
   const appSettings = await resolveSettings(settings);
@@ -956,20 +1015,42 @@ app.post('/api/remove', async (c) => {
     removalReasonTitle,
     appSettings.removalReasons.find((reason) => reason.index === removalReasonIndex)?.text || `Rule ${removalReasonIndex}`,
   );
-  const items = (await Promise.all(ids.map((id) => getThing(id).then((thing) => normalizeThing(thing, subredditName))))).map(
-    (item) => ({ id: item.id, author: item.author, type: item.type }) satisfies PendingRemovalItem,
-  );
   const settledRemovals = await Promise.allSettled(
-    ids.map(async (id) => {
+    [...new Set(ids)].map(async (id) => {
+      const thing = await getThing(id);
+      if (thing.subredditName.toLowerCase() !== subredditName.toLowerCase()) {
+        throw new Error('This item belongs to another subreddit.');
+      }
+      const item = normalizeThing(thing, subredditName);
+      const alreadyRemoved = thing.removed;
       await reddit.remove(id as never, Boolean(asSpam));
-      return id;
+      return { item, alreadyRemoved };
     }),
   );
-  const removedIds = settledRemovals.flatMap((result) => (result.status === 'fulfilled' ? [result.value] : []));
+  const removed = settledRemovals.flatMap((result) => result.status === 'fulfilled' ? [result.value] : []);
+  const items = removed.map(({ item }) => ({ id: item.id, author: item.author, type: item.type }));
+  const removedIds = items.map((item) => item.id);
   const result = {
     ok: removedIds.length,
     failed: settledRemovals.length - removedIds.length,
+    removedIds,
   };
+  const trackingResults = await Promise.allSettled(removed
+    .filter(({ item, alreadyRemoved }) => item.type === 'comment' && !alreadyRemoved)
+    .map(({ item }) => recordCommentRemoval(redis, getSubredditId(), {
+      id: `${batchId}:${item.id}`,
+      batchId,
+      commentId: item.id,
+      author: item.author,
+      permalink: item.permalink,
+      moderator,
+      removedAt: Date.now(),
+      reason: removalNote,
+      asSpam,
+    })));
+  const trackingWarning = trackingResults.some((result) => result.status === 'rejected')
+    ? 'Comments were removed, but some moderator tracking could not be saved.' : undefined;
+  if (trackingWarning) console.error('[keymoderator] removal tracking failed', trackingResults);
 
   if (removedIds.length && redditRemovalReasonId) {
     await applyRemovalReason(removedIds, redditRemovalReasonId, removalNote).catch((error) => {
@@ -993,16 +1074,32 @@ app.post('/api/remove', async (c) => {
   const subredditId = getSubredditId();
   await Promise.allSettled(items.map((item) => redis.incrBy(`removals:${subredditId}:${item.author}`, 1)));
 
-  return c.json({ batchId, ...result });
+  return c.json({ batchId, ...result, trackingWarning });
 });
 
 app.post('/api/undo', async (c) => {
   const { batchId } = await c.req.json<{ batchId: string }>();
   const pending = await redisGetJson<PendingRemovalBatch>(`undo:batch:${batchId}`);
-  await redis.del(`undo:batch:${batchId}`);
-  const result = await allSettledAction(pending?.items ?? [], (item) => reddit.approve(item.id as never));
-  await attributeModAction(pending?.items ?? [], 'Restored (undo) via KeyModerator.');
-  return c.json({ restored: result.ok, failed: result.failed });
+  const moderator = await getActingModeratorUsername();
+  if (!moderator) return c.json({ error: 'The acting moderator could not be identified.' }, 403);
+  const results = await Promise.allSettled((pending?.items ?? []).map(async (item) => {
+    await reddit.approve(item.id as never);
+    return item;
+  }));
+  const restored = results.flatMap((result) => result.status === 'fulfilled' ? [result.value] : []);
+  const failed = results.flatMap((result, index) => result.status === 'rejected' ? [pending!.items[index]!] : []);
+  const tracking = await Promise.allSettled(restored.filter((item) => item.type === 'comment')
+    .map((item) => restoreTrackedComment(redis, getSubredditId(), item.id, moderator, batchId)));
+  if (failed.length) await redisSetJson(`undo:batch:${batchId}`, { ...pending, items: failed }, 12_000);
+  else await redis.del(`undo:batch:${batchId}`);
+  await attributeModAction(restored, 'Restored (undo) via KeyModerator.');
+  return c.json({
+    restored: restored.length,
+    restoredIds: restored.map((item) => item.id),
+    failed: failed.length,
+    trackingWarning: tracking.some((result) => result.status === 'rejected')
+      ? 'Comments were restored, but some leaderboard counts could not be updated.' : undefined,
+  });
 });
 
 app.post('/api/approve', async (c) => {
@@ -1024,7 +1121,15 @@ app.post('/api/approve', async (c) => {
     return {};
   });
 
-  await attributeModAction(attributionItems, 'Approved via KeyModerator.');
+  const successful = new Set(response.updates?.map((item) => item.id));
+  const moderator = await getActingModeratorUsername();
+  const tracked = await Promise.allSettled(attributionItems
+    .filter((item) => item.type === 'comment' && successful.has(item.id))
+    .map((item) => restoreTrackedComment(redis, getSubredditId(), item.id, moderator ?? 'unknown')));
+  if (tracked.some((result) => result.status === 'rejected')) {
+    response.errors = [...(response.errors ?? []), 'Some leaderboard counts could not be updated.'];
+  }
+  await attributeModAction(attributionItems.filter((item) => successful.has(item.id)), 'Approved via KeyModerator.');
   return c.json(response);
 });
 
@@ -1275,6 +1380,10 @@ app.get('/api/notifications', async (c) => {
     modmail: modmail ? Object.values(modmail).reduce((sum, value) => sum + Number(value ?? 0), 0) : 0,
   };
   return c.json(counts);
+});
+
+app.get('/api/removal-leaderboard', async (c) => {
+  return c.json(await readRemovalLeaderboard(redis, getSubredditId(), getSubredditName()));
 });
 
 app.get('/api/mod-log', async (c) => {

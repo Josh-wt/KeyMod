@@ -68,3 +68,22 @@ export function embeddedParentCommentIds(visibleItems: QueueItem[]): Set<string>
   }
   return ids;
 }
+
+/** Visible replies (at any depth) to the given comments that are not already in `ids`. */
+export function replyIdsOf(ids: Set<string>, visibleItems: QueueItem[]): string[] {
+  if (!ids.size) return [];
+  const byId = new Map(visibleItems.map((entry) => [entry.id, entry]));
+  return visibleItems
+    .filter((item) => {
+      if (item.type !== 'comment' || ids.has(item.id)) return false;
+      const seen = new Set<string>([item.id]);
+      let parentId = item.parentId;
+      while (parentId?.startsWith('t1_') && !seen.has(parentId)) {
+        if (ids.has(parentId)) return true;
+        seen.add(parentId);
+        parentId = byId.get(parentId)?.parentId;
+      }
+      return false;
+    })
+    .map((item) => item.id);
+}

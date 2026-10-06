@@ -1,4 +1,4 @@
-import { memo, useMemo, type MouseEvent } from 'react';
+import { memo, useEffect, useMemo, useRef, type MouseEvent, type PointerEvent } from 'react';
 import { Check } from 'lucide-react';
 import type { QueueItem as QueueItemType } from '../../shared';
 import {
@@ -32,11 +32,20 @@ type Props = {
   onDragUpdate: (index: number) => void;
   onFocusLeave: () => void;
   onOpenComments?: (item: QueueItemType) => void;
+  onHoverItem?: (item: QueueItemType) => void;
   expandPost?: boolean;
   isQueueView?: boolean;
   openContextMenuId?: string | null;
   onContextMenuOpenChange?: (id: string | null) => void;
+  /** Touch screens: a tap anywhere on the row toggles it while a selection is in progress. */
+  tapToSelect?: boolean;
+  /** Touch screens: holding a row selects it together with its replies. */
+  onLongPress?: (id: string) => void;
 };
+
+const LONG_PRESS_MS = 450;
+const LONG_PRESS_SLOP_PX = 10;
+const INTERACTIVE = 'button, a, input, textarea, select, [data-mod-trigger], .mod-actions-menu-portal';
 
 function previousItemIsParentThread(previous: QueueItemType | undefined, comment: QueueItemType) {
   if (!previous || previous.type !== 'post' || comment.type !== 'comment') return false;
@@ -67,11 +76,39 @@ export const QueueItem = memo(function QueueItem({
   onDragUpdate,
   onFocusLeave,
   onOpenComments,
+  onHoverItem,
   expandPost = false,
   isQueueView = false,
   openContextMenuId,
   onContextMenuOpenChange,
+  tapToSelect = false,
+  onLongPress,
 }: Props) {
+  const longPress = useRef<{ timer: number; x: number; y: number } | null>(null);
+  const suppressClick = useRef(false);
+  const cancelLongPress = () => {
+    if (longPress.current) window.clearTimeout(longPress.current.timer);
+    longPress.current = null;
+  };
+  useEffect(() => cancelLongPress, []);
+
+  const onPointerDown = (event: PointerEvent<HTMLElement>) => {
+    suppressClick.current = false;
+    if (!onLongPress || event.pointerType === 'mouse' || (event.target as Element).closest(INTERACTIVE)) return;
+    cancelLongPress();
+    const timer = window.setTimeout(() => {
+      longPress.current = null;
+      suppressClick.current = true;
+      navigator.vibrate?.(12);
+      onLongPress(item.id);
+    }, LONG_PRESS_MS);
+    longPress.current = { timer, x: event.clientX, y: event.clientY };
+  };
+  const onPointerMove = (event: PointerEvent<HTMLElement>) => {
+    const press = longPress.current;
+    if (press && Math.hypot(event.clientX - press.x, event.clientY - press.y) > LONG_PRESS_SLOP_PX) cancelLongPress();
+  };
+
   const isComment = item.type === 'comment';
   const parentPost = item.parentPost;
   const continuesParentThreadAbove = previousItemIsParentThread(previousItem, item);
@@ -118,11 +155,31 @@ export const QueueItem = memo(function QueueItem({
         if (!related?.closest?.('.queue-row')) onFocusLeave();
       }}
       onMouseOver={() => onDragUpdate(index)}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={cancelLongPress}
+      onPointerCancel={cancelLongPress}
+      onPointerLeave={cancelLongPress}
+      onContextMenu={(event) => {
+        // A long press on touch screens would otherwise open the browser's own menu.
+        if (onLongPress && (longPress.current || suppressClick.current)) event.preventDefault();
+      }}
+      onClickCapture={(event) => {
+        if (!suppressClick.current) return;
+        suppressClick.current = false;
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+      onClick={(event) => {
+        if (!tapToSelect || (event.target as Element).closest(INTERACTIVE)) return;
+        onToggle(item.id);
+      }}
     >
       {showPostReports ? <QueueReportTags item={item} /> : null}
       <button
         className={`check-button${selected || dragPreviewed ? ' checked' : ''}${dragPreviewed && !selected ? ' preview' : ''}`}
         aria-label={selected ? 'Deselect item' : 'Select item'}
+        aria-pressed={selected}
         onMouseDown={(event) => event.stopPropagation()}
         onClick={(event) => {
           event.stopPropagation();
@@ -146,6 +203,7 @@ export const QueueItem = memo(function QueueItem({
                   menuOpen={parentPostMenuOpen}
                   onMenuOpenChange={(open) => onContextMenuOpenChange?.(open ? parentPostItem.id : null)}
                   onStop={stop}
+                  onHoverItem={onHoverItem}
                 />
               </div>
             ) : null}
@@ -171,6 +229,7 @@ export const QueueItem = memo(function QueueItem({
                         menuOpen={ctxMenuOpen}
                         onMenuOpenChange={(open) => onContextMenuOpenChange?.(open ? ctx.id : null)}
                         onStop={stop}
+                        onHoverItem={onHoverItem}
                       />
                     </div>
                   );
@@ -188,6 +247,7 @@ export const QueueItem = memo(function QueueItem({
                     menuOpen={menuOpen}
                     onMenuOpenChange={onMenuOpenChange}
                     onStop={stop}
+                    onHoverItem={onHoverItem}
                   />
                 </div>
               </div>
@@ -210,6 +270,7 @@ export const QueueItem = memo(function QueueItem({
                     menuOpen={parentPostMenuOpen}
                     onMenuOpenChange={(open) => onContextMenuOpenChange?.(open ? parentPostItem.id : null)}
                     onStop={stop}
+                    onHoverItem={onHoverItem}
                   />
                 </div>
               </div>
@@ -228,6 +289,7 @@ export const QueueItem = memo(function QueueItem({
                 menuOpen={menuOpen}
                 onMenuOpenChange={onMenuOpenChange}
                 onStop={stop}
+                onHoverItem={onHoverItem}
               />
             </div>
           </div>
@@ -242,6 +304,7 @@ export const QueueItem = memo(function QueueItem({
           onMenuOpenChange={onMenuOpenChange}
           onOpenComments={onOpenComments}
           onStop={stop}
+          onHoverItem={onHoverItem}
         />
       )}
     </article>

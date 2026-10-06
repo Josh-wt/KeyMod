@@ -1,4 +1,4 @@
-import type { AppSettings, BanReason, KeyAction, Keymap, RemovalReason } from './shared';
+import type { AppSettings, KeyAction, Keymap, RemovalReason } from './shared';
 
 export const DEFAULT_KEYMAP: Keymap = {
   approve: 's',
@@ -81,7 +81,6 @@ export async function resolveSettings(settingsApi: {
   }
 
   const removalReasons: RemovalReason[] = [];
-  const banReasons: BanReason[] = [];
   for (let index = 1; index <= 9; index += 1) {
     const text = raw[`removal_reason_${index}`];
     const flairId = raw[`removal_reason_flair_${index}`];
@@ -90,24 +89,11 @@ export async function resolveSettings(settingsApi: {
       text: typeof text === 'string' ? text : '',
       flairId: typeof flairId === 'string' ? flairId : '',
     });
-
-    const reason = raw[`ban_reason_${index}`];
-    const message = raw[`ban_message_${index}`];
-    const note = raw[`ban_note_${index}`];
-    const duration = raw[`ban_duration_${index}`];
-    banReasons.push({
-      index,
-      reason: typeof reason === 'string' ? reason : '',
-      message: typeof message === 'string' ? message : '',
-      note: typeof note === 'string' ? note : '',
-      duration: typeof duration === 'number' && Number.isFinite(duration) ? Math.max(0, Math.min(999, duration)) : 0,
-    });
   }
 
   return {
     keymap,
     removalReasons,
-    banReasons,
     conflicts: detectKeyConflicts(keymap),
   };
 }

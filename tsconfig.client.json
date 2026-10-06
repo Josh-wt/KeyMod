@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "customConditions": ["browser"] },
+  "include": ["src/client", "src/shared.ts", "src/settings.ts", "src/threadLink.ts"],
+  "exclude": []
+}

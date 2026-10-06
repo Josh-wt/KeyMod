@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { X } from 'lucide-react';
+import { Link2, Menu, Trophy, X } from 'lucide-react';
+import { context } from '@devvit/web/client';
 import { api } from './api';
 import { useFeedList } from './useFeedList';
 import { useKeymap } from './useKeymap';
@@ -20,10 +21,13 @@ import { DEFAULT_KEYMAP } from '../settings';
 import { createModHandlers } from './createModHandlers';
 import { resolveRemovalReasonIndex } from './ruleMode';
 import { runKeyAction } from './keyActions';
-import { embeddedParentCommentIds } from './commentChain';
+import { embeddedParentCommentIds, replyIdsOf } from './commentChain';
+import { useTouchUi } from './useTouchUi';
 import { scrollFocusedRowIntoView } from './scrollFocusedRow';
 import { QueueToolbar } from './components/QueueToolbar';
 import { FeedView } from './components/FeedView';
+import { WorkspaceControls } from './components/WorkspaceControls';
+import { ThreadLinkForm } from './components/ThreadLinkForm';
 
 type Modal = 'ban' | 'flair' | 'note' | 'remove' | null;
 type AppView = 'queue' | 'feed';
@@ -38,6 +42,7 @@ export default function App() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [modal, setModal] = useState<Modal>(null);
   const [showHelp, setShowHelp] = useState(false);
+  const [showThreadLink, setShowThreadLink] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [featurePanel, setFeaturePanel] = useState<FeaturePanelKind | null>(null);
   const [userPanel, setUserPanel] = useState<string | null>(null);
@@ -49,6 +54,8 @@ export default function App() {
   const [openContextMenuId, setOpenContextMenuId] = useState<string | null>(null);
   const [modalItem, setModalItem] = useState<QueueItem | null>(null);
   const [removeAsSpam, setRemoveAsSpam] = useState(false);
+  const [bulkRemoveIds, setBulkRemoveIds] = useState<string[] | null>(null);
+  const touchUi = useTouchUi();
   const [subredditRules, setSubredditRules] = useState<SubredditRule[]>([]);
   const [rulesLoading, setRulesLoading] = useState(true);
   const [rulesPanelExpanded, setRulesPanelExpanded] = useState(() => {
@@ -57,6 +64,7 @@ export default function App() {
   });
   const [expandedRuleId, setExpandedRuleId] = useState<string | null>(null);
   const [activeRule, setActiveRule] = useState<SubredditRule | null>(null);
+  const [hoveredModItem, setHoveredModItem] = useState<QueueItem | null>(null);
 
   const addToast = useCallback((message: string, kind: Toast['kind'] = 'info', persistent = false) => {
     const toast = { id: crypto.randomUUID(), kind, message, persistent };
@@ -84,7 +92,7 @@ export default function App() {
 
       const reasonLabel = asSpam
         ? 'Spam'
-        : (removalReason?.title ?? activeRule?.shortName ?? subredditRules.find((r) => r.priority === reasonIndex - 1)?.shortName ?? `Rule ${reasonIndex}`);
+        : (removalReason?.title ?? activeRule?.shortName ?? (settingsRef.current.removalReasons.find((r) => r.index === reasonIndex)?.text.trim() || undefined) ?? subredditRules.find((r) => r.priority === reasonIndex - 1)?.shortName ?? `Rule ${reasonIndex}`);
       setLastRemovalCount(ids.length);
       setLastRemovalReason(reasonLabel);
       setLastRemovalReasonIndex(reasonIndex);
@@ -100,7 +108,12 @@ export default function App() {
               pendingUndoRef.current = { batchId: response.batchId, items: removedItems };
             }
           }
+          if (response.trackingWarning) addToast(response.trackingWarning, 'warning');
+          if (response.removedIds && pendingUndoRef.current?.batchId === response.batchId) {
+            pendingUndoRef.current.items = removedItems.filter((item) => response.removedIds!.includes(item.id));
+          }
           if (response.failed) {
+            list.restoreItems(removedItems.filter((item) => !response.removedIds?.includes(item.id)));
             void list.refresh();
             addToast(`Removed ${response.ok}/${ids.length} items. ${response.failed} failed.`, 'warning');
           }
@@ -116,10 +129,12 @@ export default function App() {
 
   const remove = useCallback(
     (reasonIndex: number) => {
-      const targetIds = isQueueView ? queue.targetIds : feed.targetIds;
+      const selectedIds = isQueueView ? queue.state.selectedIds : feed.state.selectedIds;
+      const listTargetIds = isQueueView ? queue.targetIds : feed.targetIds;
+      const targetIds = selectedIds.size > 0 ? listTargetIds : hoveredModItem ? [hoveredModItem.id] : listTargetIds;
       removeIds(targetIds, reasonIndex);
     },
-    [feed.targetIds, isQueueView, queue.targetIds, removeIds],
+    [feed.state.selectedIds, feed.targetIds, hoveredModItem, isQueueView, queue.state.selectedIds, queue.targetIds, removeIds],
   );
 
   const focusItem = useCallback(
@@ -147,14 +162,12 @@ export default function App() {
 
     try {
       const response = await api.undo(batchId);
-      if (itemsToRestore.length) list.restoreItems(itemsToRestore);
+      if (itemsToRestore.length) list.restoreItems(itemsToRestore.filter((item) => response.restoredIds?.includes(item.id)));
       else if (isQueueView) await queue.load();
       else feed.refresh();
 
-      const restoredCount = Math.max(response.restored, itemsToRestore.length);
-      addToast(`Restored ${restoredCount} items.`, response.failed ? 'warning' : 'success');
-
-      if (itemsToRestore.length) void list.refresh();
+      if (response.trackingWarning) addToast(response.trackingWarning, 'warning');
+      addToast(`Restored ${response.restored} items.${response.failed ? ` ${response.failed} failed.` : ''}`, response.failed ? 'warning' : 'success');
     } catch (error) {
       addToast(error instanceof Error ? error.message : 'Undo failed', 'error');
     } finally {
@@ -165,7 +178,6 @@ export default function App() {
   const settingsRef = useRef<AppSettings>({
     keymap: DEFAULT_KEYMAP,
     removalReasons: [],
-    banReasons: [],
     conflicts: [],
   });
   const undoInFlightRef = useRef(false);
@@ -186,6 +198,7 @@ export default function App() {
     (item: QueueItem, asSpam = false) => {
       focusItem(item);
       setModalItem(item);
+      setBulkRemoveIds(null);
       setRemoveAsSpam(asSpam);
       setModal('remove');
       setOpenMenuId(null);
@@ -233,22 +246,20 @@ export default function App() {
     remove,
     async (reasonIndex) => {
       const focused = isQueueView ? queue.focused : feed.focused;
-      if (!focused) return;
-      const banReason = settingsRef.current.banReasons.find((item) => item.index === reasonIndex);
-      if (!banReason?.reason.trim()) {
-        addToast(`Ban reason ${reasonIndex} is not configured.`, 'warning');
+      if (!focused) {
+        addToast('Focus an item before choosing a ban reason.', 'warning');
         return;
       }
       try {
-        await api.ban(
-          focused.author,
-          banReason.duration === 0 ? 'permanent' : banReason.duration,
-          banReason.reason,
-          banReason.message,
-          banReason.note,
-          focused.id,
-        );
-        addToast(`Banned u/${focused.author}: ${banReason.reason}`, 'success');
+        // Ban reasons are the subreddit's own rules, numbered as in Reddit's ban dialog.
+        const { rules } = await api.banRules();
+        const reason = rules[reasonIndex - 1]?.shortName;
+        if (!reason) {
+          addToast(`r/${subreddit} has no rule ${reasonIndex}.`, 'warning');
+          return;
+        }
+        await api.ban(focused.author, 'permanent', reason, '', '', focused.id);
+        addToast(`Banned u/${focused.author}: ${reason}`, 'success');
       } catch (error) {
         addToast(error instanceof Error ? error.message : 'Ban failed', 'error');
       }
@@ -265,8 +276,8 @@ export default function App() {
 
   const subreddit = useMemo(() => {
     const items = isQueueView ? queue.state.items : feed.state.items;
-    return items[0]?.subreddit ?? 'subreddit';
-  }, [feed.state.items, isQueueView, queue.state.items]);
+    return context?.subredditName ?? (!isQueueView ? feed.state.activePost?.subreddit : undefined) ?? items[0]?.subreddit ?? 'subreddit';
+  }, [feed.state.activePost, feed.state.items, isQueueView, queue.state.items]);
 
   useEffect(() => {
     if (window.matchMedia('(max-width: 720px)').matches) {
@@ -310,7 +321,48 @@ export default function App() {
     [activeRule, feed, isQueueView, queue, removeIds],
   );
 
+  const selectedIds = isQueueView ? queue.state.selectedIds : feed.state.selectedIds;
+  const listItems = isQueueView ? queue.visibleItems : feed.visibleItems;
+  const selectableReplyIds = useMemo(() => replyIdsOf(selectedIds, listItems), [listItems, selectedIds]);
+
+  const addSelected = useCallback(
+    (ids: string[]) => {
+      if (isQueueView) queue.addSelected(ids);
+      else feed.addSelected(ids);
+    },
+    [feed, isQueueView, queue],
+  );
+
+  const selectWithReplies = useCallback(
+    (id: string) => {
+      // Removal mode acts on a single tap; holding must never sweep up a whole thread.
+      if (activeRule) return;
+      const replies = replyIdsOf(new Set([id]), listItems);
+      addSelected([id, ...replies]);
+      if (replies.length) addToast(`Selected with ${replies.length} ${replies.length === 1 ? 'reply' : 'replies'}.`, 'info');
+    },
+    [activeRule, addSelected, addToast, listItems],
+  );
+
+  const openBulkRemoval = useCallback(() => {
+    const ids = isQueueView ? queue.targetIds : feed.targetIds;
+    if (!ids.length) return;
+    setModalItem(null);
+    setBulkRemoveIds(ids);
+    setRemoveAsSpam(false);
+    setModal('remove');
+  }, [feed.targetIds, isQueueView, queue.targetIds]);
+
+  const closeRemovalModal = useCallback(() => {
+    setModal(null);
+    setModalItem(null);
+    setBulkRemoveIds(null);
+    setRemoveAsSpam(false);
+  }, []);
+
+  const tapToSelect = touchUi && selectedCount > 0 && !activeRule;
   const focused = isQueueView ? queue.focused : feed.focused;
+  const activeItem = hoveredModItem ?? focused;
   const embeddedParentIds = useMemo(
     () => (isQueueView ? embeddedParentCommentIds(queue.visibleItems) : new Set<string>()),
     [isQueueView, queue.visibleItems],
@@ -371,6 +423,7 @@ export default function App() {
   );
 
   const actionItem = modalItem ?? focused;
+  const removalIds = bulkRemoveIds ?? (actionItem ? [actionItem.id] : []);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -462,9 +515,9 @@ export default function App() {
 
   useEffect(() => {
     setFocusedUserInfo(null);
-    if (!focused?.author) return;
-    api.user(focused.author).then(setFocusedUserInfo).catch(() => undefined);
-  }, [focused?.author]);
+    if (!activeItem?.author) return;
+    api.user(activeItem.author).then(setFocusedUserInfo).catch(() => undefined);
+  }, [activeItem?.author]);
 
   const commands = useMemo<Command[]>(() => {
     return [
@@ -509,6 +562,14 @@ export default function App() {
         run: () => setFeaturePanel('mod-log'),
       },
       {
+        id: 'leaderboard-open',
+        title: 'Open removal leaderboard',
+        subtitle: 'Comment removals by moderator in this subreddit',
+        section: 'Removal Leaderboard',
+        keywords: ['leaderboard', 'removals', 'deleted', 'who', 'moderators', 'tracking'],
+        run: () => setFeaturePanel('leaderboard'),
+      },
+      {
         id: 'automod-open',
         title: 'Open AutoMod',
         subtitle: 'Config, validation, and filtered content overview',
@@ -519,9 +580,37 @@ export default function App() {
     ];
   }, []);
 
+  const ruleBanner = activeRule ? (
+    <div className="rule-mode-banner">
+      <span>
+        <strong>{activeRule.shortName}</strong> removal mode — tap an item's circle to remove it with this reason.
+        {' '}<kbd>Ctrl+{(activeRule.priority ?? 0) + 1}</kbd>
+      </span>
+      <button type="button" onClick={() => setActiveRule(null)} aria-label="Exit removal mode">
+        <X size={16} /> Done
+      </button>
+    </div>
+  ) : null;
+
+  const selectionBar = selectedCount > 0 ? (
+    <SelectionBar
+      selectedCount={selectedCount}
+      replyCount={selectableReplyIds.length}
+      keymap={settings.keymap}
+      onApprove={() => void dispatch('approve')}
+      onRemove={openBulkRemoval}
+      onSpam={() => void dispatch('spam')}
+      onLock={() => void dispatch('lock')}
+      onIgnoreReports={() => void dispatch('ignoreReports')}
+      onAddReplies={() => addSelected(selectableReplyIds)}
+      onSelectAll={() => (isQueueView ? queue.selectAllVisible() : feed.selectAllVisible())}
+      onClear={clearSelection}
+    />
+  ) : null;
+
   return (
     <main
-      className={`app-shell feed-shell${activeRule ? ' removal-mode-active' : ''}`}
+      className={`app-shell feed-shell${activeRule ? ' removal-mode-active' : ''}${tapToSelect ? ' selecting' : ''}`}
       onMouseUp={() => {
         if (isQueueView) queue.endDrag();
         else feed.endDrag();
@@ -545,18 +634,36 @@ export default function App() {
             Feed
           </button>
         </nav>
+        <button type="button" className="open-thread-button" onClick={() => setShowThreadLink((current) => !current)}
+          aria-label="Open Reddit thread link" aria-expanded={showThreadLink} title="Open Reddit thread link">
+          <Link2 size={16} /><span>Open thread</span>
+        </button>
         <nav className="topbar-actions">
-          <button onClick={() => setShowCommandPalette(true)} aria-label="Open global actions">
-            Ctrl+K
+          <button type="button" onClick={() => setFeaturePanel('leaderboard')} aria-label="Open removal leaderboard" title="Removal leaderboard">
+            <Trophy size={16} />
           </button>
-          <button onClick={() => setShowHelp(true)} aria-label="Open help">
+          <button className="shortcut-button" onClick={() => setShowCommandPalette(true)} aria-label="Open global actions" title="Mod tools">
+            <Menu size={16} className="shortcut-button-icon" /><span>Ctrl+K</span>
+          </button>
+          <button className="help-button" onClick={() => setShowHelp(true)} aria-label="Open help">
             ?
           </button>
-          <button type="button" className="topbar-close" onClick={() => window.close()} aria-label="Close">
-            <X size={16} />
-          </button>
         </nav>
+        <WorkspaceControls onError={(message) => addToast(message, 'error')} />
       </header>
+
+      {showThreadLink ? <ThreadLinkForm onClose={() => setShowThreadLink(false)} onOpen={async (link) => {
+        await feed.openThread(link);
+        queue.clearSelection();
+        setHoveredModItem(null);
+        setOpenMenuId(null);
+        setOpenContextMenuId(null);
+        setView('feed');
+        setShowThreadLink(false);
+        requestAnimationFrame(() => {
+          if (feed.threadFocusId.current) scrollFocusedRowIntoView(feed.threadFocusId.current);
+        });
+      }} /> : null}
 
       {settings.conflicts.map((conflict) => (
         <div className="warning-banner" key={`${conflict.key}:${conflict.actions.join('-')}`}>
@@ -608,26 +715,29 @@ export default function App() {
                   onDragStart={queue.startDrag}
                   onDragUpdate={queue.updateDrag}
                   onFocusLeave={queue.clearHover}
+                  onHoverItem={setHoveredModItem}
                   isQueueView
                   openContextMenuId={openContextMenuId}
                   onContextMenuOpenChange={setOpenContextMenuId}
+                  tapToSelect={tapToSelect}
+                  onLongPress={touchUi ? selectWithReplies : undefined}
                 />
               ))}
               {queue.state.isLoading ? <div className="empty-state">Loading queue</div> : null}
               {!queue.state.isLoading && !queue.visibleItems.length ? (
                 <div className="empty-state">{queue.state.items.length ? 'No items match this filter' : 'Queue is empty'}</div>
               ) : null}
+              {!queue.state.isLoading && queue.state.after ? (
+                <button type="button" className="feed-load-more" onClick={() => void queue.load(queue.state.after)}>
+                  Load more
+                </button>
+              ) : null}
             </section>
           </div>
 
-          {activeRule ? (
-            <div className="rule-mode-banner">
-              <strong>{activeRule.shortName}</strong> removal mode — tap a row checkbox to remove with this reason.
-              {' '}<kbd>Ctrl+{(activeRule.priority ?? 0) + 1}</kbd>
-            </div>
-          ) : null}
+          {ruleBanner}
 
-          {selectedCount > 0 ? <SelectionBar selectedCount={selectedCount} focusedCount={focused ? 1 : 0} /> : null}
+          {selectionBar}
         </>
       ) : (
         <>
@@ -644,16 +754,14 @@ export default function App() {
             expandedRuleId={expandedRuleId}
             activeRuleId={activeRule?.id ?? null}
             onRuleExpand={handleRuleExpand}
-              onRemovalModeToggle={handleRemovalModeToggle}
+            onRemovalModeToggle={handleRemovalModeToggle}
             onToggle={handleItemToggle}
+            onHoverItem={setHoveredModItem}
+            tapToSelect={tapToSelect}
+            onLongPress={touchUi ? selectWithReplies : undefined}
           />
-          {activeRule ? (
-            <div className="rule-mode-banner">
-              <strong>{activeRule.shortName}</strong> removal mode — tap a row checkbox to remove with this reason.
-              {' '}<kbd>Ctrl+{(activeRule.priority ?? 0) + 1}</kbd>
-            </div>
-          ) : null}
-          {selectedCount > 0 ? <SelectionBar selectedCount={selectedCount} focusedCount={focused ? 1 : 0} /> : null}
+          {ruleBanner}
+          {selectionBar}
         </>
       )}
 
@@ -676,21 +784,17 @@ export default function App() {
         />
       ) : null}
 
-      {modal === 'remove' && actionItem ? (
+      {modal === 'remove' && removalIds.length ? (
         <RemovalReasonModal
-          title={removeAsSpam ? 'Remove as spam' : 'Remove item'}
+          title={`${removeAsSpam ? 'Remove as spam' : 'Remove'}: ${removalIds.length === 1 ? '1 item' : `${removalIds.length} items`}`}
           reasons={settings.removalReasons}
+          rules={subredditRules}
           asSpam={removeAsSpam}
-          onCancel={() => {
-            setModal(null);
-            setModalItem(null);
-            setRemoveAsSpam(false);
-          }}
-          onSubmit={(reasonIndex) => {
-            removeIds([actionItem.id], reasonIndex, removeAsSpam);
-            setModal(null);
-            setModalItem(null);
-            setRemoveAsSpam(false);
+          instant={touchUi}
+          onCancel={closeRemovalModal}
+          onSubmit={(reasonIndex, choice) => {
+            removeIds(removalIds, reasonIndex, removeAsSpam, choice);
+            closeRemovalModal();
           }}
         />
       ) : null}
@@ -755,6 +859,7 @@ export default function App() {
           removalReasons={settings.removalReasons}
           userInfo={focusedUserInfo}
           selectedCount={selectedCount}
+          subreddit={subreddit}
           onClose={() => setFeaturePanel(null)}
         />
       ) : null}

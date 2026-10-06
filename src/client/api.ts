@@ -5,9 +5,11 @@ import type {
   CrowdControlLevel,
   FeedSort,
   ModLogMatrix,
+  RemovalLeaderboard,
   NotificationCounts,
   QueueItem,
   SubredditRule,
+  ThreadData,
   UserInfo,
 } from '../shared';
 import type { ModActionResult } from './modActions';
@@ -38,6 +40,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   settings: () => request<AppSettings>('/api/settings'),
   subredditRules: () => request<{ rules: SubredditRule[] }>('/api/subreddit-rules'),
+  banRules: () => request<{ rules: SubredditRule[] }>('/api/ban-rules'),
   queue: (after?: string | null) =>
     request<{ items: QueueItem[]; after: string | null }>(`/api/queue${after ? `?after=${encodeURIComponent(after)}` : ''}`),
   feed: (sort: FeedSort = 'hot', after?: string | null) => {
@@ -47,6 +50,10 @@ export const api = {
   },
   feedComments: (postId: string) =>
     request<{ comments: QueueItem[] }>(`/api/feed/${encodeURIComponent(postId)}/comments`),
+  thread: (link: string) => request<ThreadData>('/api/thread', {
+    method: 'POST',
+    body: JSON.stringify({ link }),
+  }),
   remove: (
     ids: string[],
     removalReasonIndex: number,
@@ -55,12 +62,12 @@ export const api = {
     removalReasonTitle?: string,
     batchId?: string,
   ) =>
-    request<{ batchId: string; ok: number; failed: number }>('/api/remove', {
+    request<{ batchId: string; ok: number; failed: number; removedIds?: string[]; trackingWarning?: string }>('/api/remove', {
       method: 'POST',
       body: JSON.stringify({ ids, removalReasonIndex, asSpam, removalReasonId, removalReasonTitle, batchId }),
     }),
   undo: (batchId: string) =>
-    request<{ restored: number; failed: number }>('/api/undo', {
+    request<{ restored: number; failed: number; restoredIds?: string[]; trackingWarning?: string }>('/api/undo', {
       method: 'POST',
       body: JSON.stringify({ batchId }),
     }),
@@ -91,6 +98,7 @@ export const api = {
     request<{ ok: true }>('/api/note', { method: 'POST', body: JSON.stringify({ username, note, redditId }) }),
   user: (username: string) => request<UserInfo>(`/api/user/${encodeURIComponent(username)}`),
   notifications: () => request<NotificationCounts>('/api/notifications'),
+  removalLeaderboard: () => request<RemovalLeaderboard>('/api/removal-leaderboard'),
   modLog: () => request<ModLogMatrix>('/api/mod-log'),
   automod: () => request<AutomodPanelData>('/api/automod'),
   validateAutomod: (config: string) =>

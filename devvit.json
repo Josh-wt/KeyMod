@@ -13,9 +13,12 @@
     "dir": "dist/client",
     "entrypoints": {
       "default": {
-        "entry": "index.html",
+        "entry": "launch.html",
         "height": "tall",
-        "inline": false
+        "inline": true
+      },
+      "workspace": {
+        "entry": "index.html"
       }
     }
   },
@@ -53,42 +56,6 @@
       "removal_reason_flair_7": { "type": "string", "label": "Removal reason 7 flair ID", "defaultValue": "" },
       "removal_reason_flair_8": { "type": "string", "label": "Removal reason 8 flair ID", "defaultValue": "" },
       "removal_reason_flair_9": { "type": "string", "label": "Removal reason 9 flair ID", "defaultValue": "" },
-      "ban_reason_1": { "type": "string", "label": "Ban reason 1", "defaultValue": "" },
-      "ban_reason_2": { "type": "string", "label": "Ban reason 2", "defaultValue": "" },
-      "ban_reason_3": { "type": "string", "label": "Ban reason 3", "defaultValue": "" },
-      "ban_reason_4": { "type": "string", "label": "Ban reason 4", "defaultValue": "" },
-      "ban_reason_5": { "type": "string", "label": "Ban reason 5", "defaultValue": "" },
-      "ban_reason_6": { "type": "string", "label": "Ban reason 6", "defaultValue": "" },
-      "ban_reason_7": { "type": "string", "label": "Ban reason 7", "defaultValue": "" },
-      "ban_reason_8": { "type": "string", "label": "Ban reason 8", "defaultValue": "" },
-      "ban_reason_9": { "type": "string", "label": "Ban reason 9", "defaultValue": "" },
-      "ban_message_1": { "type": "paragraph", "label": "Ban message 1", "defaultValue": "" },
-      "ban_message_2": { "type": "paragraph", "label": "Ban message 2", "defaultValue": "" },
-      "ban_message_3": { "type": "paragraph", "label": "Ban message 3", "defaultValue": "" },
-      "ban_message_4": { "type": "paragraph", "label": "Ban message 4", "defaultValue": "" },
-      "ban_message_5": { "type": "paragraph", "label": "Ban message 5", "defaultValue": "" },
-      "ban_message_6": { "type": "paragraph", "label": "Ban message 6", "defaultValue": "" },
-      "ban_message_7": { "type": "paragraph", "label": "Ban message 7", "defaultValue": "" },
-      "ban_message_8": { "type": "paragraph", "label": "Ban message 8", "defaultValue": "" },
-      "ban_message_9": { "type": "paragraph", "label": "Ban message 9", "defaultValue": "" },
-      "ban_note_1": { "type": "string", "label": "Ban mod note 1", "defaultValue": "" },
-      "ban_note_2": { "type": "string", "label": "Ban mod note 2", "defaultValue": "" },
-      "ban_note_3": { "type": "string", "label": "Ban mod note 3", "defaultValue": "" },
-      "ban_note_4": { "type": "string", "label": "Ban mod note 4", "defaultValue": "" },
-      "ban_note_5": { "type": "string", "label": "Ban mod note 5", "defaultValue": "" },
-      "ban_note_6": { "type": "string", "label": "Ban mod note 6", "defaultValue": "" },
-      "ban_note_7": { "type": "string", "label": "Ban mod note 7", "defaultValue": "" },
-      "ban_note_8": { "type": "string", "label": "Ban mod note 8", "defaultValue": "" },
-      "ban_note_9": { "type": "string", "label": "Ban mod note 9", "defaultValue": "" },
-      "ban_duration_1": { "type": "number", "label": "Ban duration 1 days, 0 for permanent", "defaultValue": 0 },
-      "ban_duration_2": { "type": "number", "label": "Ban duration 2 days, 0 for permanent", "defaultValue": 0 },
-      "ban_duration_3": { "type": "number", "label": "Ban duration 3 days, 0 for permanent", "defaultValue": 0 },
-      "ban_duration_4": { "type": "number", "label": "Ban duration 4 days, 0 for permanent", "defaultValue": 0 },
-      "ban_duration_5": { "type": "number", "label": "Ban duration 5 days, 0 for permanent", "defaultValue": 0 },
-      "ban_duration_6": { "type": "number", "label": "Ban duration 6 days, 0 for permanent", "defaultValue": 0 },
-      "ban_duration_7": { "type": "number", "label": "Ban duration 7 days, 0 for permanent", "defaultValue": 0 },
-      "ban_duration_8": { "type": "number", "label": "Ban duration 8 days, 0 for permanent", "defaultValue": 0 },
-      "ban_duration_9": { "type": "number", "label": "Ban duration 9 days, 0 for permanent", "defaultValue": 0 },
       "key_approve": { "type": "string", "label": "Key binding: approve", "defaultValue": "s" },
       "key_ban": { "type": "string", "label": "Key binding: ban", "defaultValue": "b" },
       "key_lock": { "type": "string", "label": "Key binding: lock", "defaultValue": "l" },
@@ -118,6 +85,7 @@
     }
   },
   "triggers": {
+    "onAppUpgrade": "/internal/triggers/repair-host-fallback",
     "onAutomoderatorFilterPost": "/internal/triggers/automod-filter",
     "onAutomoderatorFilterComment": "/internal/triggers/automod-filter"
   },
@@ -126,6 +94,6 @@
     "dev": "vite build --config vite.devvit.config.ts --watch"
   },
   "dev": {
-    "subreddit": "realsnoo"
+    "subreddit": "ARSPharma"
   }
 }

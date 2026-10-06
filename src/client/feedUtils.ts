@@ -1,9 +1,13 @@
 export function feedAge(createdAt?: number) {
   if (!createdAt) return '';
   const seconds = Math.max(1, Math.floor((Date.now() - createdAt) / 1000));
-  if (seconds < 3600) return `${Math.floor(seconds / 60)} min.`;
-  if (seconds < 86_400) return `${Math.floor(seconds / 3600)} hr.`;
-  return `${Math.floor(seconds / 86_400)} d`;
+  if (seconds < 60) return 'a moment';
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} min`;
+  if (seconds < 86_400) return `${Math.floor(seconds / 3600)} hr`;
+  const days = seconds / 86_400;
+  if (days < 30) return `${Math.floor(days)} d`;
+  if (days < 365) return `${Math.round(days / 30)} mo`;
+  return `${Math.floor(days / 365)} yr`;
 }
 
 export function compactNumber(value?: number) {

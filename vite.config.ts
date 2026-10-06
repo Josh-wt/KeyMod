@@ -1,6 +1,7 @@
 import react from '@vitejs/plugin-react';
 import { defineConfig, type Plugin } from 'vite';
-import type { QueueItem } from './src/shared';
+import type { CommentRemovalEvent, QueueItem } from './src/shared';
+import { parseThreadLink } from './src/threadLink';
 
 function json(res: import('node:http').ServerResponse, body: unknown) {
   res.statusCode = 200;
@@ -462,6 +463,7 @@ let queueItems: DemoItem[] = [...demoItemsSeed];
 const modPatches: Record<string, ModPatch> = {};
 const removedIds = new Set<string>();
 const undoBatches = new Map<string, string[]>();
+const demoRemovalEvents = new Map<string, CommentRemovalEvent>();
 
 function mergeItem(item: DemoItem) {
   return { ...item, ...modPatches[item.id] };
@@ -575,6 +577,30 @@ function localApiPlugin(): Plugin {
               duration: index === 0 ? 7 : 0,
             })),
             conflicts: [],
+          });
+          return;
+        }
+        if (url === '/thread') {
+          void readJsonBody(req).then((body) => {
+            const link = (body as { link?: unknown } | null)?.link;
+            if (typeof link !== 'string') throw new Error('Provide a Reddit thread link.');
+            const target = parseThreadLink(link);
+            // Local preview fixtures; production reads the actual post through Reddit.
+            const seed = demoItemsSeed.find((item) => item.type === 'post');
+            if (!seed) throw new Error('No preview post available.');
+            const post: QueueItem = { ...mergeItem(seed), id: target.postId,
+              permalink: `https://www.reddit.com/r/teenagers/comments/${target.postId.slice(3)}/preview/`,
+              body: 'Local preview of thread navigation. Reddit playtest loads the actual linked post.' };
+            const comments = demoItemsSeed.filter((item) => item.type === 'comment').slice(0, 3).map((item, index) => ({
+              ...mergeItem(item), id: index === 2 && target.commentId ? target.commentId : `t1_preview${index + 1}`,
+              postId: post.id, parentId: post.id, contextComments: undefined,
+              parentPost: undefined, parentPostTitle: post.title, parentPostPermalink: post.permalink,
+            }));
+            json(res, { post, comments, focusedId: target.commentId ?? post.id });
+          }).catch((error) => {
+            res.statusCode = 400;
+            res.setHeader('content-type', 'application/json');
+            res.end(JSON.stringify({ error: error instanceof Error ? error.message : 'Invalid thread link.' }));
           });
           return;
         }
@@ -997,6 +1023,19 @@ function localApiPlugin(): Plugin {
           json(res, { modqueue: 4, modmail: 2, messages: 1, unmoderated: 8 });
           return;
         }
+        if (url.startsWith('/removal-leaderboard')) {
+          const recent = [...demoRemovalEvents.values()].sort((a, b) => b.removedAt - a.removedAt);
+          const scores = new Map<string, number>();
+          for (const event of recent) {
+            if (!event.restoredAt) scores.set(event.moderator, (scores.get(event.moderator) ?? 0) + 1);
+          }
+          json(res, {
+            subreddit: 'teenagers',
+            rows: [...scores].map(([moderator, removals]) => ({ moderator, removals })).sort((a, b) => b.removals - a.removals),
+            recent: recent.slice(0, 50),
+          });
+          return;
+        }
         if (url.startsWith('/mod-log')) {
           json(res, {
             rows: [
@@ -1126,12 +1165,30 @@ function localApiPlugin(): Plugin {
                     ? payload.batchId
                     : crypto.randomUUID();
                 undoBatches.set(batchId, ids);
-                json(res, { batchId, ok: ids.length, failed: 0 });
+                for (const id of new Set(ids)) {
+                  if (!id.startsWith('t1_') || [...demoRemovalEvents.values()].some((event) => event.commentId === id && !event.restoredAt)) continue;
+                  const item = demoItemsSeed.find((item) => item.id === id);
+                  const eventId = `${batchId}:${id}`;
+                  if (demoRemovalEvents.has(eventId)) continue;
+                  demoRemovalEvents.set(eventId, {
+                    id: eventId, batchId, commentId: id, author: item?.author ?? 'demo_comment_author',
+                    permalink: item?.permalink ?? `https://reddit.com/r/teenagers/comments/demo/comment/${id.replace('t1_', '')}`,
+                    moderator: 'demo_moderator', removedAt: Date.now(),
+                    reason: String((body as { removalReasonTitle?: string }).removalReasonTitle ?? 'Demo removal'),
+                    asSpam: Boolean((body as { asSpam?: boolean }).asSpam),
+                  });
+                }
+                json(res, { batchId, ok: ids.length, failed: 0, removedIds: ids });
                 return;
               }
 
               if (url.startsWith('/approve')) {
                 for (const id of ids) removedIds.add(id);
+                for (const event of demoRemovalEvents.values()) {
+                  if (ids.includes(event.commentId) && !event.restoredAt) {
+                    event.restoredAt = Date.now(); event.restoredBy = 'demo_moderator';
+                  }
+                }
                 json(res, { ok: ids.length, failed: 0, updates: ids.map((id) => ({ id })) });
                 return;
               }
@@ -1228,7 +1285,12 @@ function localApiPlugin(): Plugin {
               const ids = undoBatches.get(batchId) ?? [];
               for (const id of ids) removedIds.delete(id);
               undoBatches.delete(batchId);
-              json(res, { restored: ids.length, failed: 0 });
+              for (const event of demoRemovalEvents.values()) {
+                if (event.batchId === batchId && ids.includes(event.commentId) && !event.restoredAt) {
+                  event.restoredAt = Date.now(); event.restoredBy = 'demo_moderator';
+                }
+              }
+              json(res, { restored: ids.length, failed: 0, restoredIds: ids });
             })
             .catch(() => {
               res.statusCode = 400;

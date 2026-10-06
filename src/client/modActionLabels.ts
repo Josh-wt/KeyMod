@@ -42,17 +42,21 @@ export const modMenuEntries: ModMenuEntry[] = [
     label: (item) => `Adjust crowd control (${item.crowdControlLevel ?? 'OFF'})`,
   },
   {
-    id: 'distinguish',
-    icon: 'default',
-    label: (item) => (item.distinguished ? 'Undistinguish' : 'Distinguish as mod'),
-  },
-  {
     id: 'ignoreReports',
     icon: 'default',
     label: (item) => (item.ignoringReports ? 'Unignore reports' : 'Ignore reports'),
   },
-  { id: 'mute', icon: 'default', label: (item) => `Mute u/${item.author}` },
   { id: 'user', icon: 'user', label: (item) => `View u/${item.author}` },
   { id: 'note', icon: 'note', label: () => 'Add mod note' },
   { id: 'ban', icon: 'ban', label: (item) => `Ban u/${item.author}` },
 ];
+
+export function visibleModMenuEntries(item: QueueItem): ModMenuEntry[] {
+  const hasAuthor = Boolean(item.author && !['[deleted]', '[removed]', 'AutoModerator'].includes(item.author));
+  return modMenuEntries.filter((entry) => {
+    if (entry.postOnly && item.type !== 'post') return false;
+    if (entry.id === 'ignoreReports' && !item.numReports && !item.reportReasons.length && !item.ignoringReports) return false;
+    if (['ban', 'note', 'user'].includes(entry.id) && !hasAuthor) return false;
+    return true;
+  });
+}

@@ -19,13 +19,26 @@ export function NoteModal({ username, onCancel, onSubmit }: Props) {
   }, [note, onCancel, onSubmit]);
 
   return (
-    <div className="modal-backdrop">
+    <div
+      className="modal-backdrop"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onCancel();
+      }}
+    >
       <section className="modal">
         <h2>Mod note for u/{username}</h2>
         <label>
           Note
           <input autoFocus value={note} onChange={(event) => setNote(event.target.value)} />
         </label>
+        <div className="modal-actions">
+          <button type="button" onClick={onCancel}>
+            Cancel
+          </button>
+          <button type="button" className="primary" disabled={!note.trim()} onClick={() => onSubmit(note.trim())}>
+            Save note
+          </button>
+        </div>
         <div className="modal-hints">Enter to save · Esc to cancel</div>
       </section>
     </div>

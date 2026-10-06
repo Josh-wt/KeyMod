@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from './api';
 import type { FeedSort, QueueItem } from '../shared';
 
@@ -23,6 +23,9 @@ function clampFocus(index: number, length: number) {
 }
 
 export function useFeedList(addToast: (message: string, kind?: 'info' | 'warning' | 'error' | 'success') => void) {
+  const requestVersion = useRef(0);
+  const threadFocusId = useRef<string | null>(null);
+  const threadLink = useRef<string | null>(null);
   const [state, setState] = useState<FeedListState>({
     items: [],
     comments: [],
@@ -46,9 +49,12 @@ export function useFeedList(addToast: (message: string, kind?: 'info' | 'warning
 
   const load = useCallback(
     async (sort: FeedSort, after?: string | null) => {
+      const version = ++requestVersion.current;
       setState((current) => ({ ...current, isLoading: true, ...(after ? {} : { sort }) }));
       try {
         const response = await api.feed(sort, after);
+        if (version !== requestVersion.current) return;
+        if (!after) threadLink.current = null;
         setState((current) => ({
           ...current,
           sort,
@@ -60,6 +66,7 @@ export function useFeedList(addToast: (message: string, kind?: 'info' | 'warning
           isLoading: false,
         }));
       } catch (error) {
+        if (version !== requestVersion.current) return;
         addToast(error instanceof Error ? error.message : 'Could not load feed', 'error');
         setState((current) => ({ ...current, isLoading: false }));
       }
@@ -172,14 +179,22 @@ export function useFeedList(addToast: (message: string, kind?: 'info' | 'warning
     setState((current) => ({ ...current, selectedIds: new Set(), dragPreviewIds: new Set() }));
   }, []);
 
-  const selectIds = useCallback((ids: string[]) => {
-    if (ids.length < 2) return;
+  const addSelected = useCallback((ids: string[]) => {
+    if (!ids.length) return;
     setState((current) => {
       const selectedIds = new Set(current.selectedIds);
       ids.forEach((id) => selectedIds.add(id));
       return { ...current, selectedIds };
     });
   }, []);
+
+  const selectIds = useCallback(
+    (ids: string[]) => {
+      if (ids.length < 2) return;
+      addSelected(ids);
+    },
+    [addSelected],
+  );
 
   const startDrag = useCallback((index: number) => {
     setState((current) => ({
@@ -234,6 +249,21 @@ export function useFeedList(addToast: (message: string, kind?: 'info' | 'warning
 
   const markRemoved = useCallback((ids: string[], batchId: string) => {
     setState((current) => {
+      const activePost = current.activePost;
+      if (activePost) {
+        const mark = (item: QueueItem) =>
+          ids.includes(item.id) ? { ...item, locallyRemoved: true, lastRemovalReasonLabel: 'Removed' } : item;
+        return {
+          ...current,
+          items: current.items.map(mark),
+          comments: current.comments.map(mark),
+          activePost: mark(activePost),
+          selectedIds: new Set([...current.selectedIds].filter((id) => !ids.includes(id))),
+          dragPreviewIds: new Set([...current.dragPreviewIds].filter((id) => !ids.includes(id))),
+          lastBatchId: batchId,
+          undoCountdown: 10,
+        };
+      }
       const nextItems = current.items.filter((item) => !ids.includes(item.id));
       const nextComments = current.comments.filter((item) => !ids.includes(item.id));
       const nextActivePost = current.activePost && ids.includes(current.activePost.id) ? null : current.activePost;
@@ -279,18 +309,43 @@ export function useFeedList(addToast: (message: string, kind?: 'info' | 'warning
   const restoreItems = useCallback((items: QueueItem[]) => {
     if (!items.length) return;
     setState((current) => {
-      const existing = new Set([...current.items, ...current.comments].map((item) => item.id));
-      const restored = items.filter((item) => !existing.has(item.id));
-      if (!restored.length) return { ...current, undoCountdown: null, lastBatchId: null };
+      const restoreIds = new Set(items.map((item) => item.id));
+      const clearLocalRemoval = (item: QueueItem) => {
+        if (!restoreIds.has(item.id)) return item;
+        const { locallyRemoved, lastRemovalReasonLabel, ...restored } = item;
+        return restored;
+      };
+      const existing = new Set([
+        ...current.items,
+        ...current.comments,
+        ...(current.activePost ? [current.activePost] : []),
+      ].map((item) => item.id));
+      const restored = items
+        .filter((item) => !existing.has(item.id))
+        .map(({ locallyRemoved, lastRemovalReasonLabel, ...item }) => item);
+      const itemsWithClearedRemoval = current.items.map(clearLocalRemoval);
+      const commentsWithClearedRemoval = current.comments.map(clearLocalRemoval);
+      const activePostWithClearedRemoval = current.activePost ? clearLocalRemoval(current.activePost) : null;
+      if (!restored.length) {
+        return {
+          ...current,
+          items: itemsWithClearedRemoval,
+          comments: commentsWithClearedRemoval,
+          activePost: activePostWithClearedRemoval,
+          undoCountdown: null,
+          lastBatchId: null,
+        };
+      }
       const restoredComments = current.activePost ? restored.filter((item) => item.type === 'comment') : [];
       const restoredItems = restored.filter((item) => !restoredComments.includes(item));
-      const mergedItems = [...current.items, ...restoredItems].sort((a, b) => b.createdAt - a.createdAt);
-      const mergedComments = [...current.comments, ...restoredComments].sort((a, b) => b.createdAt - a.createdAt);
-      const visible = current.activePost ? [current.activePost, ...mergedComments] : mergedItems;
+      const mergedItems = [...itemsWithClearedRemoval, ...restoredItems].sort((a, b) => b.createdAt - a.createdAt);
+      const mergedComments = [...commentsWithClearedRemoval, ...restoredComments].sort((a, b) => b.createdAt - a.createdAt);
+      const visible = activePostWithClearedRemoval ? [activePostWithClearedRemoval, ...mergedComments] : mergedItems;
       return {
         ...current,
         items: mergedItems,
         comments: mergedComments,
+        activePost: activePostWithClearedRemoval,
         undoCountdown: null,
         lastBatchId: null,
         focusedIndex: clampFocus(current.focusedIndex, visible.length),
@@ -305,6 +360,8 @@ export function useFeedList(addToast: (message: string, kind?: 'info' | 'warning
 
   const openPost = useCallback(
     async (post: QueueItem) => {
+      const version = ++requestVersion.current;
+      threadLink.current = null;
       setState((current) => ({
         ...current,
         activePost: post,
@@ -316,6 +373,7 @@ export function useFeedList(addToast: (message: string, kind?: 'info' | 'warning
       }));
       try {
         const response = await api.feedComments(post.id);
+        if (version !== requestVersion.current) return;
         setState((current) =>
           current.activePost?.id === post.id
             ? {
@@ -327,6 +385,7 @@ export function useFeedList(addToast: (message: string, kind?: 'info' | 'warning
             : current,
         );
       } catch (error) {
+        if (version !== requestVersion.current) return;
         addToast(error instanceof Error ? error.message : 'Could not load post comments', 'error');
         setState((current) => (current.activePost?.id === post.id ? { ...current, isLoading: false } : current));
       }
@@ -334,7 +393,28 @@ export function useFeedList(addToast: (message: string, kind?: 'info' | 'warning
     [addToast],
   );
 
+  const openThread = useCallback(async (link: string) => {
+    const version = ++requestVersion.current;
+    setState((current) => ({ ...current, isLoading: true }));
+    try {
+      const response = await api.thread(link);
+      if (version !== requestVersion.current) throw new Error('Thread navigation was cancelled. Please try again.');
+      const items = [response.post, ...response.comments];
+      threadFocusId.current = response.focusedId;
+      threadLink.current = link;
+      setState((current) => ({ ...current, activePost: response.post, comments: response.comments,
+        focusedIndex: Math.max(0, items.findIndex((item) => item.id === response.focusedId)),
+        selectedIds: new Set(), dragPreviewIds: new Set(), isDragging: false, dragStartIndex: null, isLoading: false }));
+    } catch (error) {
+      if (version === requestVersion.current) setState((current) => ({ ...current, isLoading: false }));
+      throw error;
+    }
+  }, []);
+
   const closePost = useCallback(() => {
+    requestVersion.current++;
+    threadFocusId.current = null;
+    threadLink.current = null;
     setState((current) => ({
       ...current,
       activePost: null,
@@ -347,12 +427,17 @@ export function useFeedList(addToast: (message: string, kind?: 'info' | 'warning
   }, []);
 
   const refresh = useCallback(() => {
+    if (state.activePost && threadLink.current) {
+      void openThread(threadLink.current).catch((error) =>
+        addToast(error instanceof Error ? error.message : 'Could not refresh thread', 'error'));
+      return;
+    }
     if (state.activePost) {
       void openPost(state.activePost);
       return;
     }
     refreshFeed();
-  }, [openPost, refreshFeed, state.activePost]);
+  }, [addToast, openPost, openThread, refreshFeed, state.activePost]);
 
   return {
     state,
@@ -363,6 +448,8 @@ export function useFeedList(addToast: (message: string, kind?: 'info' | 'warning
     refresh,
     setSort,
     openPost,
+    openThread,
+    threadFocusId,
     closePost,
     moveFocus,
     focusIndex,
@@ -371,6 +458,7 @@ export function useFeedList(addToast: (message: string, kind?: 'info' | 'warning
     selectAllVisible,
     clearSelection,
     selectIds,
+    addSelected,
     clearHover,
     startDrag,
     updateDrag,

@@ -14,13 +14,12 @@ import {
   ShieldCheck,
   MoreHorizontal,
   Pin,
-  Shield,
   Tag,
   User,
   X,
 } from 'lucide-react';
 import type { QueueItem } from '../../shared';
-import { modMenuEntries, type ModMenuEntry } from '../modActionLabels';
+import { visibleModMenuEntries, type ModMenuEntry } from '../modActionLabels';
 import type { ModItemHandlers } from '../modActions';
 
 type Props = {
@@ -89,18 +88,24 @@ function ModActionsMenu({
   onClose: () => void;
   onStop?: (event: MouseEvent) => void;
 }) {
-  const isPost = item.type === 'post';
-  const visibleEntries = modMenuEntries.filter((entry) => !entry.postOnly || isPost);
-  const top = anchorRect.bottom + 6;
+  const visibleEntries = visibleModMenuEntries(item);
+  const top = Math.max(8, Math.min(anchorRect.bottom + 6, window.innerHeight - Math.min(480, window.innerHeight - 16)));
   const right = Math.max(8, window.innerWidth - anchorRect.right);
 
   return createPortal(
+    <>
+    {/* Dims the page behind the touch action sheet; hidden for the desktop popover. */}
+    <div className="mod-actions-backdrop" onClick={onClose} />
     <div
       className="mod-actions-menu mod-actions-menu-portal"
       role="menu"
-      style={{ top, right }}
+      style={{ top, right, maxHeight: window.innerHeight - top - 8 }}
       onMouseDown={(event) => stop(event, onStop)}
     >
+      <div className="mod-actions-menu-title">
+        <strong>{item.type === 'post' ? 'Post' : 'Comment'}{item.author ? ` by u/${item.author}` : ''}</strong>
+        <span>{item.type === 'post' ? item.title : item.body || item.title}</span>
+      </div>
       {visibleEntries.map((entry) => (
         <button
           key={entry.id}
@@ -117,7 +122,12 @@ function ModActionsMenu({
           <span>{entry.label(item)}</span>
         </button>
       ))}
-    </div>,
+      <button type="button" className="mod-actions-menu-item mod-actions-menu-cancel" onClick={onClose}>
+        <X size={16} />
+        <span>Cancel</span>
+      </button>
+    </div>
+    </>,
     document.body,
   );
 }
@@ -145,7 +155,7 @@ export function ModActions({ item, menuOpen, onMenuOpenChange, handlers, hostRef
     function onPointerDown(event: PointerEvent) {
       const target = event.target as Node;
       if (hostRef.current?.contains(target)) return;
-      if ((target as Element).closest('.mod-actions-menu-portal')) return;
+      if ((target as Element).closest('.mod-actions-menu-portal, .mod-actions-backdrop')) return;
       onMenuOpenChange(false);
     }
 
@@ -154,12 +164,18 @@ export function ModActions({ item, menuOpen, onMenuOpenChange, handlers, hostRef
       if (anchor) setAnchorRect(anchor.getBoundingClientRect());
     }
 
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') onMenuOpenChange(false);
+    }
+
     window.addEventListener('pointerdown', onPointerDown);
     window.addEventListener('resize', onReposition);
+    window.addEventListener('keydown', onKeyDown);
     window.addEventListener('scroll', onReposition, true);
     return () => {
       window.removeEventListener('pointerdown', onPointerDown);
       window.removeEventListener('resize', onReposition);
+      window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('scroll', onReposition, true);
     };
   }, [hostRef, menuOpen, onMenuOpenChange]);
@@ -193,21 +209,6 @@ export function ModActions({ item, menuOpen, onMenuOpenChange, handlers, hostRef
             }}
           >
             <X size={18} />
-          </button>
-          <button
-            type="button"
-            className="mod-action-icon shield"
-            aria-label="More mod actions"
-            aria-expanded={menuOpen}
-            data-mod-trigger
-            onMouseDown={(e) => stop(e, onStop)}
-            onClick={(e) => {
-              stop(e, onStop);
-              if (menuOpen) onMenuOpenChange(false);
-              else openMenu(barRef.current);
-            }}
-          >
-            <Shield size={18} />
           </button>
         </div>
       </div>

@@ -39,7 +39,7 @@ const filters: Array<{ id: QueueFilter; label: string; count: (stats: Stats) => 
 ];
 
 const postKindFilters: Array<{ id: QueuePostKindFilter; label: string; count: (stats: PostKindStats) => number }> = [
-  { id: 'all', label: 'All posts', count: (s) => s.text + s.image + s.video },
+  { id: 'all', label: 'All', count: (s) => s.text + s.image + s.video },
   { id: 'text', label: 'Text', count: (s) => s.text },
   { id: 'image', label: 'Image', count: (s) => s.image },
   { id: 'video', label: 'Video', count: (s) => s.video },

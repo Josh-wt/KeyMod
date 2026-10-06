@@ -110,6 +110,16 @@ export function createModHandlers({
           return;
         }
 
+        if (action === 'ignoreReports') {
+          const response = await runIgnoreReports([item.id], patchItem, findItem);
+          if (response.failed) {
+            addToast(response.errors?.[0] ?? 'Ignore reports failed.', 'error');
+            return;
+          }
+          addToast(findItem(item.id)?.ignoringReports ? 'Reports ignored.' : 'Reports unignored.', 'success');
+          return;
+        }
+
         if (item.type !== 'post') {
           addToast('This action only applies to posts.', 'warning');
           return;
@@ -156,17 +166,6 @@ export function createModHandlers({
           }
           const distinguished = findItem(item.id)?.distinguished;
           addToast(distinguished ? 'Distinguished.' : 'Undistinguished.', 'success');
-          return;
-        }
-
-        if (action === 'ignoreReports') {
-          const response = await runIgnoreReports([item.id], patchItem, findItem);
-          if (response.failed) {
-            addToast(response.errors?.[0] ?? 'Ignore reports failed.', 'error');
-            return;
-          }
-          const ignoring = findItem(item.id)?.ignoringReports;
-          addToast(ignoring ? 'Reports ignored.' : 'Reports unignored.', 'success');
           return;
         }
 

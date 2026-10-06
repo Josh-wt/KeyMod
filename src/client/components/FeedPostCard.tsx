@@ -5,6 +5,8 @@ import { compactNumber, feedAge, mediaUrl, subredditInitials } from '../feedUtil
 import type { ModItemHandlers } from '../modActions';
 import { ModActions } from './ModActions';
 import { QueueMeta } from './QueueMeta';
+import { RedditMarkdown } from './RedditMarkdown';
+import { ShareButton } from './ShareButton';
 
 export type FeedPostSource = {
   subreddit: string;
@@ -33,6 +35,7 @@ type Props = {
   onMenuOpenChange?: (open: boolean) => void;
   onOpenComments?: (item: QueueItem) => void;
   onStop?: (event: MouseEvent) => void;
+  onHoverItem?: (item: QueueItem) => void;
 };
 
 function stop(event: MouseEvent, onStop?: (event: MouseEvent) => void) {
@@ -111,6 +114,7 @@ export function FeedPostCard({
   onMenuOpenChange,
   onOpenComments,
   onStop,
+  onHoverItem,
 }: Props) {
   const hostRef = useRef<HTMLElement>(null);
   const embedded = variant === 'embedded';
@@ -122,7 +126,11 @@ export function FeedPostCard({
   return (
     <article
       ref={hostRef}
-      className={`feed-post${embedded ? ' feed-post-embedded' : ''}${expanded ? ' feed-post-expanded' : ''}${showModActions ? ' feed-post-with-mod' : ''}${embedded && showModActions ? ' feed-post-embedded-moderatable' : ''}`}
+      className={`feed-post${embedded ? ' feed-post-embedded' : ''}${expanded ? ' feed-post-expanded' : ''}${showModActions ? ' feed-post-with-mod' : ''}${embedded && showModActions ? ' feed-post-embedded-moderatable' : ''}${item?.locallyRemoved ? ' locally-removed' : ''}`}
+      data-moderation-id={item?.id}
+      onMouseEnter={() => {
+        if (item) onHoverItem?.(item);
+      }}
     >
       <header className="feed-post-header">
         <div className="subreddit-avatar" data-has-icon={Boolean(post.subredditIcon)}>
@@ -133,6 +141,7 @@ export function FeedPostCard({
           {post.createdAt ? <span className="feed-post-time">{feedAge(post.createdAt)} ago</span> : null}
           {item && !embedded ? <QueueMeta item={item} /> : null}
           {headerExtra}
+          {post.author ? <span className="feed-post-author">{post.author}</span> : null}
         </div>
       </header>
 
@@ -166,7 +175,7 @@ export function FeedPostCard({
         </a>
       ) : null}
 
-      {!embedded && post.body ? <p className="feed-post-body">{post.body}</p> : null}
+      {(!embedded || expanded) && post.body ? <RedditMarkdown className="feed-post-body">{post.body}</RedditMarkdown> : null}
 
       {!embedded || showModActions ? (
         <footer className="feed-post-actions">
@@ -177,7 +186,7 @@ export function FeedPostCard({
                 {compactNumber(post.score)}
                 <ArrowBigDown size={18} />
               </span>
-              <button
+              {item && onOpenComments ? <button
                 type="button"
                 className="public-action-button"
                 onMouseDown={(event) => stop(event, onStop)}
@@ -185,11 +194,12 @@ export function FeedPostCard({
                   stop(event, onStop);
                   if (item) onOpenComments?.(item);
                 }}
-                disabled={!item || !onOpenComments}
+                aria-label={`Open ${compactNumber(post.numComments)} comments`}
               >
                 <MessageCircle size={16} />
                 {compactNumber(post.numComments)}
-              </button>
+              </button> : <span className="comment-count"><MessageCircle size={16} />{compactNumber(post.numComments)}</span>}
+              <ShareButton permalink={post.permalink} />
             </div>
           ) : null}
           {showModActions && item && modHandlers && onMenuOpenChange ? (

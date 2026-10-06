@@ -1,4 +1,5 @@
 import { ArrowLeft, RefreshCw } from 'lucide-react';
+import { Fragment } from 'react';
 import type { FeedSort, SubredditRule } from '../../shared';
 import type { ModItemHandlers } from '../modActions';
 import type { useFeedList } from '../useFeedList';
@@ -22,6 +23,9 @@ type Props = {
   onRuleExpand: (ruleId: string) => void;
   onRemovalModeToggle: (rule: SubredditRule) => void;
   onToggle: (id: string) => void;
+  onHoverItem?: (item: FeedList['visibleItems'][number]) => void;
+  tapToSelect?: boolean;
+  onLongPress?: (id: string) => void;
 };
 
 const SORTS: FeedSort[] = ['hot', 'new', 'top'];
@@ -41,27 +45,22 @@ export function FeedView({
   onRuleExpand,
   onRemovalModeToggle,
   onToggle,
+  onHoverItem,
+  tapToSelect,
+  onLongPress,
 }: Props) {
   const { state, visibleItems } = feed;
 
   return (
-    <div className="queue-workspace">
+    <div className={`queue-workspace${state.activePost ? ' thread-workspace' : ''}`}>
       <aside className="filter-sidebar" aria-label="Feed controls">
         <section className="sidebar-panel sidebar-panel-queue">
+          {state.activePost ? <button type="button" className="thread-back-button" onClick={feed.closePost}>
+            <ArrowLeft size={14} /> Back to feed
+          </button> : null}
           <div className="sidebar-panel-toolbar">
-            <h2 className="sidebar-section-title">Feed</h2>
+            <h2 className="sidebar-section-title">{state.activePost ? 'Thread' : 'Feed'}</h2>
             <div className="sidebar-toolbar-actions">
-              {state.activePost ? (
-                <button
-                  type="button"
-                  className="sidebar-icon-button"
-                  onClick={feed.closePost}
-                  aria-label="Back to feed"
-                  title="Back to feed"
-                >
-                  <ArrowLeft size={15} />
-                </button>
-              ) : null}
               <button
                 type="button"
                 className="sidebar-icon-button"
@@ -102,8 +101,9 @@ export function FeedView({
         />
       </aside>
 
-      <section className="queue-list">
+      <section className={`queue-list${state.activePost ? ' thread-list' : ''}`} aria-label={state.activePost ? 'Reddit thread' : 'Subreddit feed'}>
         {visibleItems.map((item, index) => (
+          <Fragment key={item.id}>
           <QueueItemRow
             key={item.id}
             item={item}
@@ -123,8 +123,18 @@ export function FeedView({
             onDragUpdate={feed.updateDrag}
             onFocusLeave={feed.clearHover}
             onOpenComments={feed.openPost}
+            onHoverItem={onHoverItem}
             expandPost={Boolean(state.activePost && item.id === state.activePost.id)}
+            tapToSelect={tapToSelect}
+            onLongPress={onLongPress}
           />
+          {state.activePost && index === 0 ? <div className="thread-heading">
+            <h3>Comments <span>{state.comments.length}</span></h3>
+            <button type="button" onClick={feed.refresh} disabled={state.isLoading} aria-label="Refresh thread">
+              <RefreshCw size={14} className={state.isLoading ? 'spin' : ''} /> Refresh
+            </button>
+          </div> : null}
+          </Fragment>
         ))}
         {state.isLoading ? <div className="empty-state">Loading {state.activePost ? 'comments' : subreddit}</div> : null}
         {!state.isLoading && !visibleItems.length ? <div className="empty-state">No posts found</div> : null}

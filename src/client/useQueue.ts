@@ -173,14 +173,22 @@ export function useQueue(addToast: (message: string, kind?: 'info' | 'warning' |
     setState((current) => ({ ...current, selectedIds: new Set(), dragPreviewIds: new Set() }));
   }, []);
 
-  const selectIds = useCallback((ids: string[]) => {
-    if (ids.length < 2) return;
+  const addSelected = useCallback((ids: string[]) => {
+    if (!ids.length) return;
     setState((current) => {
       const selectedIds = new Set(current.selectedIds);
       ids.forEach((id) => selectedIds.add(id));
       return { ...current, selectedIds };
     });
   }, []);
+
+  const selectIds = useCallback(
+    (ids: string[]) => {
+      if (ids.length < 2) return;
+      addSelected(ids);
+    },
+    [addSelected],
+  );
 
   const startDrag = useCallback((index: number) => {
     setState((current) => ({
@@ -271,7 +279,9 @@ export function useQueue(addToast: (message: string, kind?: 'info' | 'warning' |
     if (!items.length) return;
     setState((current) => {
       const existing = new Set(current.items.map((item) => item.id));
-      const restored = items.filter((item) => !existing.has(item.id));
+      const restored = items
+        .filter((item) => !existing.has(item.id))
+        .map(({ locallyRemoved, lastRemovalReasonLabel, ...item }) => item);
       if (!restored.length) return { ...current, undoCountdown: null, lastBatchId: null };
       const merged = [...current.items, ...restored].sort((a, b) => b.createdAt - a.createdAt);
       const visible = visibleQueueItems(merged, current.filter, current.postKindFilter);
@@ -303,6 +313,7 @@ export function useQueue(addToast: (message: string, kind?: 'info' | 'warning' |
     selectAllVisible,
     clearSelection,
     selectIds,
+    addSelected,
     clearHover,
     startDrag,
     updateDrag,

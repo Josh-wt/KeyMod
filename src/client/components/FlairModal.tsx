@@ -28,16 +28,26 @@ export function FlairModal({ onCancel, onSelect }: Props) {
   }, [flairs, onCancel, onSelect]);
 
   return (
-    <div className="modal-backdrop">
+    <div
+      className="modal-backdrop"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onCancel();
+      }}
+    >
       <section className="modal">
         <h2>Apply flair</h2>
         <div className="number-list">
           {flairs.map((flair, index) => (
-            <button key={flair.id} onClick={() => onSelect(flair.id)}>
-              [{index + 1}] {flair.text ?? flair.name ?? flair.id}
+            <button key={flair.id} type="button" onClick={() => onSelect(flair.id)}>
+              <kbd>{index + 1}</kbd> {flair.text ?? flair.name ?? flair.id}
             </button>
           ))}
           {!flairs.length ? <p>No flairs available</p> : null}
+        </div>
+        <div className="modal-actions">
+          <button type="button" onClick={onCancel}>
+            Cancel
+          </button>
         </div>
         <div className="modal-hints">Number to apply · Esc to cancel</div>
       </section>
