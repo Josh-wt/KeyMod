@@ -6,6 +6,7 @@ import { useFeedList } from './useFeedList';
 import { useKeymap } from './useKeymap';
 import { useQueue } from './useQueue';
 import { BanModal } from './components/BanModal';
+import { RemoveBanModal } from './components/RemoveBanModal';
 import { CommandPalette, type Command } from './components/CommandPalette';
 import { FeaturePanel, type FeaturePanelKind } from './components/FeaturePanel';
 import { FlairModal } from './components/FlairModal';
@@ -29,7 +30,8 @@ import { FeedView } from './components/FeedView';
 import { WorkspaceControls } from './components/WorkspaceControls';
 import { ThreadLinkForm } from './components/ThreadLinkForm';
 
-type Modal = 'ban' | 'flair' | 'note' | 'remove' | null;
+type Modal = 'ban' | 'flair' | 'note' | 'remove' | 'removeBan' | null;
+type BanTarget = { username: string; contextId: string };
 type AppView = 'queue' | 'feed';
 
 function closestQueueRow(node: Node | null) {
@@ -55,7 +57,7 @@ export default function App() {
   const [modalItem, setModalItem] = useState<QueueItem | null>(null);
   const [removeAsSpam, setRemoveAsSpam] = useState(false);
   const [bulkRemoveIds, setBulkRemoveIds] = useState<string[] | null>(null);
-  const [bulkBanTargets, setBulkBanTargets] = useState<Array<{ username: string; contextId: string }> | null>(null);
+  const [bulkBanTargets, setBulkBanTargets] = useState<BanTarget[] | null>(null);
   const touchUi = useTouchUi();
   const [subredditRules, setSubredditRules] = useState<SubredditRule[]>([]);
   const [rulesLoading, setRulesLoading] = useState(true);
@@ -355,33 +357,60 @@ export default function App() {
     setModal('remove');
   }, [feed.targetIds, isQueueView, queue.targetIds]);
 
-  const openBulkBan = useCallback(() => {
-    const ids = new Set(isQueueView ? queue.targetIds : feed.targetIds);
-    // One ban per author, with their first selected item as the ban context.
-    const targets = new Map<string, string>();
-    for (const item of listItems) {
-      if (!ids.has(item.id) || !item.author || item.author === '[deleted]' || targets.has(item.author)) continue;
-      targets.set(item.author, item.id);
-    }
-    if (!targets.size) {
-      addToast('No bannable authors in this selection.', 'warning');
-      return;
-    }
-    setModalItem(null);
-    setBulkBanTargets([...targets].map(([username, contextId]) => ({ username, contextId })));
-    setModal('ban');
-  }, [addToast, feed.targetIds, isQueueView, listItems, queue.targetIds]);
+  /** Opens the ban dialog for the selection's authors, optionally removing the selected items too. */
+  const openBulkBan = useCallback(
+    (alsoRemove = false) => {
+      const ids = isQueueView ? queue.targetIds : feed.targetIds;
+      const idSet = new Set(ids);
+      // One ban per author, with their first selected item as the ban context.
+      const targets = new Map<string, string>();
+      for (const item of listItems) {
+        if (!idSet.has(item.id) || !item.author || item.author === '[deleted]' || targets.has(item.author)) continue;
+        targets.set(item.author, item.id);
+      }
+      if (!targets.size) {
+        addToast('No bannable authors in this selection.', 'warning');
+        return;
+      }
+      setModalItem(null);
+      setBulkRemoveIds(alsoRemove ? ids : null);
+      setRemoveAsSpam(false);
+      setBulkBanTargets([...targets].map(([username, contextId]) => ({ username, contextId })));
+      setModal(alsoRemove ? 'removeBan' : 'ban');
+    },
+    [addToast, feed.targetIds, isQueueView, listItems, queue.targetIds],
+  );
+
+  const banUsers = useCallback(
+    async (targets: BanTarget[], duration: number | 'permanent', reason: string) => {
+      const failed: string[] = [];
+      for (const target of targets) {
+        try {
+          await api.ban(target.username, duration, reason, '', '', target.contextId);
+        } catch {
+          failed.push(target.username);
+        }
+      }
+      const banned = targets.length - failed.length;
+      if (banned) addToast(targets.length === 1 ? `Banned u/${targets[0].username}.` : `Banned ${banned} ${banned === 1 ? 'user' : 'users'}.`, 'success');
+      if (failed.length) addToast(`Ban failed for ${failed.map((name) => `u/${name}`).join(', ')}.`, 'error');
+      return failed;
+    },
+    [addToast],
+  );
 
   const closeBanModal = useCallback(() => {
     setModal(null);
     setModalItem(null);
     setBulkBanTargets(null);
+    setBulkRemoveIds(null);
   }, []);
 
   const closeRemovalModal = useCallback(() => {
     setModal(null);
     setModalItem(null);
     setBulkRemoveIds(null);
+    setBulkBanTargets(null);
     setRemoveAsSpam(false);
   }, []);
 
@@ -461,6 +490,21 @@ export default function App() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
+
+  // Shift+B: remove the selection and ban its authors in one dialog.
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      const activeTag = document.activeElement?.tagName;
+      if (modal !== null || !selectedCount || activeTag === 'INPUT' || activeTag === 'TEXTAREA') return;
+      if (!event.shiftKey || event.ctrlKey || event.metaKey || event.altKey || event.key.toLowerCase() !== 'b') return;
+      event.preventDefault();
+      event.stopPropagation();
+      openBulkBan(true);
+    }
+    // Capture phase, so the single-key ban binding does not also fire.
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [modal, openBulkBan, selectedCount]);
 
   useEffect(() => {
     function selectRowsFromNativeTextSelection() {
@@ -627,7 +671,8 @@ export default function App() {
       onRemove={openBulkRemoval}
       onSpam={() => void dispatch('spam')}
       onLock={() => void dispatch('lock')}
-      onBan={openBulkBan}
+      onBan={() => openBulkBan()}
+      onRemoveAndBan={() => openBulkBan(true)}
       onAddReplies={() => addSelected(selectableReplyIds)}
       onSelectAll={() => (isQueueView ? queue.selectAllVisible() : feed.selectAllVisible())}
       onClear={clearSelection}
@@ -825,6 +870,22 @@ export default function App() {
         />
       ) : null}
 
+      {modal === 'removeBan' && bulkRemoveIds?.length && bulkBanTargets?.length ? (
+        <RemoveBanModal
+          itemCount={bulkRemoveIds.length}
+          usernames={bulkBanTargets.map((target) => target.username)}
+          reasons={settings.removalReasons}
+          rules={subredditRules}
+          onCancel={closeBanModal}
+          onSubmit={(reasonIndex, choice, banReason) => {
+            const targets = bulkBanTargets;
+            removeIds(bulkRemoveIds, reasonIndex, false, choice);
+            closeBanModal();
+            void banUsers(targets, 'permanent', banReason);
+          }}
+        />
+      ) : null}
+
       {modal === 'ban' && banTargets.length ? (
         <BanModal
           usernames={banTargets.map((target) => target.username)}
@@ -832,17 +893,7 @@ export default function App() {
           onSubmit={async (duration, reason) => {
             const bulk = Boolean(bulkBanTargets);
             closeBanModal();
-            const failed: string[] = [];
-            for (const target of banTargets) {
-              try {
-                await api.ban(target.username, duration, reason, '', '', target.contextId);
-              } catch {
-                failed.push(target.username);
-              }
-            }
-            const banned = banTargets.length - failed.length;
-            if (banned) addToast(banned === 1 && !failed.length ? `Banned u/${banTargets[0].username}.` : `Banned ${banned} ${banned === 1 ? 'user' : 'users'}.`, 'success');
-            if (failed.length) addToast(`Ban failed for ${failed.map((name) => `u/${name}`).join(', ')}.`, 'error');
+            const failed = await banUsers(banTargets, duration, reason);
             if (bulk && !failed.length) clearSelection();
           }}
         />

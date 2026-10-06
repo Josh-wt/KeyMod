@@ -3360,3 +3360,16 @@ body { overflow: hidden; overscroll-behavior: none; }
 .selection-action.ban { color: #ffaeae; }
 .selection-action.ban:hover { background: #4d243a; }
 .ban-targets { max-height: 4.5em; overflow-y: auto; overflow-wrap: anywhere; }
+.selection-action.remove-ban { border-color: rgb(224 64 64 / 55%); color: #ffaeae; }
+.selection-action.remove-ban:hover { background: #4d243a; }
+.modal.remove-ban-modal { width: min(720px, calc(100vw - 32px)); }
+.remove-ban-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.remove-ban-columns h3 { margin: 0 0 8px; color: #a8a8a8; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+.remove-ban-columns .removal-reason-list { margin-bottom: 0; max-height: min(45vh, 320px); }
+.touch-ui .selection-bar-actions { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; }
+.touch-ui .selection-action.remove-ban span { white-space: normal; line-height: 1.1; text-align: center; }
+.touch-ui .modal.remove-ban-modal { width: min(560px, 100%); }
+.touch-ui .remove-ban-columns { grid-template-columns: 1fr; gap: 12px; max-height: 58dvh; overflow-y: auto; overscroll-behavior: contain; }
+.touch-ui .remove-ban-columns .removal-reason-list { max-height: none; overflow: visible; }
+.touch-ui .remove-ban-columns .removal-reason-list button { min-height: 44px; padding: 10px 14px; }
+.touch-ui .removal-reason-list button.active { border-color: var(--accent); background: var(--accent-soft); }

@@ -4,7 +4,7 @@ import { resolveRemovalReasonIndex } from '../ruleMode';
 
 export type RemovalChoice = { id?: string; title?: string };
 
-type Option = {
+export type RemovalOption = {
   key: string;
   reasonIndex: number;
   label: string;
@@ -24,28 +24,31 @@ type Props = {
   onSubmit: (reasonIndex: number, choice?: RemovalChoice) => void;
 };
 
+/** Configured removal reasons, falling back to the subreddit's rules, then to a reasonless removal. */
+export function removalOptions(reasons: RemovalReason[], rules: SubredditRule[]): RemovalOption[] {
+  const configured = reasons.filter((reason) => reason.text.trim()).sort((a, b) => a.index - b.index);
+  if (configured.length) {
+    return configured.map((reason) => ({
+      key: `reason:${reason.index}`,
+      reasonIndex: reason.index,
+      label: reason.text,
+      shortcut: reason.index,
+    }));
+  }
+  if (rules.length) {
+    return rules.map((rule, position) => ({
+      key: `rule:${rule.id}`,
+      reasonIndex: resolveRemovalReasonIndex(rule, reasons),
+      label: rule.shortName,
+      shortcut: position < 9 ? position + 1 : undefined,
+      choice: { id: rule.removalReasonId, title: rule.shortName },
+    }));
+  }
+  return [{ key: 'none', reasonIndex: 1, label: 'Remove without a reason', shortcut: 1 }];
+}
+
 export function RemovalReasonModal({ title, reasons, rules = [], asSpam = false, instant = false, onCancel, onSubmit }: Props) {
-  const options = useMemo<Option[]>(() => {
-    const configured = reasons.filter((reason) => reason.text.trim()).sort((a, b) => a.index - b.index);
-    if (configured.length) {
-      return configured.map((reason) => ({
-        key: `reason:${reason.index}`,
-        reasonIndex: reason.index,
-        label: reason.text,
-        shortcut: reason.index,
-      }));
-    }
-    if (rules.length) {
-      return rules.map((rule, position) => ({
-        key: `rule:${rule.id}`,
-        reasonIndex: resolveRemovalReasonIndex(rule, reasons),
-        label: rule.shortName,
-        shortcut: position < 9 ? position + 1 : undefined,
-        choice: { id: rule.removalReasonId, title: rule.shortName },
-      }));
-    }
-    return [{ key: 'none', reasonIndex: 1, label: 'Remove without a reason', shortcut: 1 }];
-  }, [reasons, rules]);
+  const options = useMemo(() => removalOptions(reasons, rules), [reasons, rules]);
   const [selectedKey, setSelectedKey] = useState(options[0].key);
   const selected = options.find((option) => option.key === selectedKey) ?? options[0];
 
