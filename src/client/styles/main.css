@@ -3373,3 +3373,6 @@ body { overflow: hidden; overscroll-behavior: none; }
 .touch-ui .remove-ban-columns .removal-reason-list { max-height: none; overflow: visible; }
 .touch-ui .remove-ban-columns .removal-reason-list button { min-height: 44px; padding: 10px 14px; }
 .touch-ui .removal-reason-list button.active { border-color: var(--accent); background: var(--accent-soft); }
+.remove-ban-modal h2 { margin-bottom: 16px; }
+.remove-ban-modal .modal-actions { margin-top: 18px; }
+.touch-ui .modal-actions button:disabled { opacity: 0.45; }
