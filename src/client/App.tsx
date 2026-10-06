@@ -55,6 +55,7 @@ export default function App() {
   const [modalItem, setModalItem] = useState<QueueItem | null>(null);
   const [removeAsSpam, setRemoveAsSpam] = useState(false);
   const [bulkRemoveIds, setBulkRemoveIds] = useState<string[] | null>(null);
+  const [bulkBanTargets, setBulkBanTargets] = useState<Array<{ username: string; contextId: string }> | null>(null);
   const touchUi = useTouchUi();
   const [subredditRules, setSubredditRules] = useState<SubredditRule[]>([]);
   const [rulesLoading, setRulesLoading] = useState(true);
@@ -188,6 +189,7 @@ export default function App() {
     (item: QueueItem, nextModal: Modal) => {
       focusItem(item);
       setModalItem(item);
+      setBulkBanTargets(null);
       setModal(nextModal);
       setOpenMenuId(null);
     },
@@ -353,6 +355,29 @@ export default function App() {
     setModal('remove');
   }, [feed.targetIds, isQueueView, queue.targetIds]);
 
+  const openBulkBan = useCallback(() => {
+    const ids = new Set(isQueueView ? queue.targetIds : feed.targetIds);
+    // One ban per author, with their first selected item as the ban context.
+    const targets = new Map<string, string>();
+    for (const item of listItems) {
+      if (!ids.has(item.id) || !item.author || item.author === '[deleted]' || targets.has(item.author)) continue;
+      targets.set(item.author, item.id);
+    }
+    if (!targets.size) {
+      addToast('No bannable authors in this selection.', 'warning');
+      return;
+    }
+    setModalItem(null);
+    setBulkBanTargets([...targets].map(([username, contextId]) => ({ username, contextId })));
+    setModal('ban');
+  }, [addToast, feed.targetIds, isQueueView, listItems, queue.targetIds]);
+
+  const closeBanModal = useCallback(() => {
+    setModal(null);
+    setModalItem(null);
+    setBulkBanTargets(null);
+  }, []);
+
   const closeRemovalModal = useCallback(() => {
     setModal(null);
     setModalItem(null);
@@ -424,6 +449,7 @@ export default function App() {
 
   const actionItem = modalItem ?? focused;
   const removalIds = bulkRemoveIds ?? (actionItem ? [actionItem.id] : []);
+  const banTargets = bulkBanTargets ?? (actionItem ? [{ username: actionItem.author, contextId: actionItem.id }] : []);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -601,7 +627,7 @@ export default function App() {
       onRemove={openBulkRemoval}
       onSpam={() => void dispatch('spam')}
       onLock={() => void dispatch('lock')}
-      onIgnoreReports={() => void dispatch('ignoreReports')}
+      onBan={openBulkBan}
       onAddReplies={() => addSelected(selectableReplyIds)}
       onSelectAll={() => (isQueueView ? queue.selectAllVisible() : feed.selectAllVisible())}
       onClear={clearSelection}
@@ -799,18 +825,25 @@ export default function App() {
         />
       ) : null}
 
-      {modal === 'ban' && actionItem ? (
+      {modal === 'ban' && banTargets.length ? (
         <BanModal
-          username={actionItem.author}
-          onCancel={() => {
-            setModal(null);
-            setModalItem(null);
-          }}
+          usernames={banTargets.map((target) => target.username)}
+          onCancel={closeBanModal}
           onSubmit={async (duration, reason) => {
-            await api.ban(actionItem.author, duration, reason, '', '', actionItem.id);
-            setModal(null);
-            setModalItem(null);
-            addToast(`Banned u/${actionItem.author}.`, 'success');
+            const bulk = Boolean(bulkBanTargets);
+            closeBanModal();
+            const failed: string[] = [];
+            for (const target of banTargets) {
+              try {
+                await api.ban(target.username, duration, reason, '', '', target.contextId);
+              } catch {
+                failed.push(target.username);
+              }
+            }
+            const banned = banTargets.length - failed.length;
+            if (banned) addToast(banned === 1 && !failed.length ? `Banned u/${banTargets[0].username}.` : `Banned ${banned} ${banned === 1 ? 'user' : 'users'}.`, 'success');
+            if (failed.length) addToast(`Ban failed for ${failed.map((name) => `u/${name}`).join(', ')}.`, 'error');
+            if (bulk && !failed.length) clearSelection();
           }}
         />
       ) : null}

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 
 type Props = {
-  username: string;
+  /** One user, or every author of a multi-item selection. */
+  usernames: string[];
   onCancel: () => void;
   onSubmit: (duration: number | 'permanent', reason: string) => void;
 };
@@ -13,7 +14,8 @@ const durations: Array<{ label: string; value: number | 'permanent' }> = [
   { label: 'Permanent', value: 'permanent' },
 ];
 
-export function BanModal({ username, onCancel, onSubmit }: Props) {
+export function BanModal({ usernames, onCancel, onSubmit }: Props) {
+  const target = usernames.length === 1 ? `u/${usernames[0]}` : `${usernames.length} users`;
   const [selected, setSelected] = useState(1);
   const [reason, setReason] = useState('');
 
@@ -35,7 +37,8 @@ export function BanModal({ username, onCancel, onSubmit }: Props) {
       }}
     >
       <section className="modal">
-        <h2>Ban u/{username}</h2>
+        <h2>Ban {target}</h2>
+        {usernames.length > 1 ? <p className="modal-subtitle ban-targets">{usernames.map((name) => `u/${name}`).join(', ')}</p> : null}
         <div className="duration-grid">
           {durations.map((duration, index) => (
             <button
@@ -57,7 +60,7 @@ export function BanModal({ username, onCancel, onSubmit }: Props) {
             Cancel
           </button>
           <button type="button" className="primary danger" onClick={() => onSubmit(durations[selected - 1].value, reason)}>
-            Ban u/{username}
+            Ban {target}
           </button>
         </div>
         <div className="modal-hints">Enter to confirm · Esc to cancel</div>

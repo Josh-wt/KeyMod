@@ -3357,3 +3357,6 @@ body { overflow: hidden; overscroll-behavior: none; }
 .touch-ui .modal-actions button.danger { border-color: #e04040; background: #4d1f1f; }
 .touch-ui .modal input { border-color: var(--line); border-radius: 12px; background: var(--surface-0); }
 .topbar .shortcut-button span { color: inherit; }
+.selection-action.ban { color: #ffaeae; }
+.selection-action.ban:hover { background: #4d243a; }
+.ban-targets { max-height: 4.5em; overflow-y: auto; overflow-wrap: anywhere; }

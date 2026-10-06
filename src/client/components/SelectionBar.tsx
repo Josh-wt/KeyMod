@@ -1,4 +1,4 @@
-import { AlertCircle, Check, CheckCheck, CornerDownRight, EyeOff, Lock, Trash2, X } from 'lucide-react';
+import { AlertCircle, Ban, Check, CheckCheck, CornerDownRight, Lock, Trash2, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { Keymap } from '../../shared';
 
@@ -11,7 +11,7 @@ type Props = {
   onRemove: () => void;
   onSpam: () => void;
   onLock: () => void;
-  onIgnoreReports: () => void;
+  onBan: () => void;
   onAddReplies: () => void;
   onSelectAll: () => void;
   onClear: () => void;
@@ -47,7 +47,7 @@ export function SelectionBar({
   onRemove,
   onSpam,
   onLock,
-  onIgnoreReports,
+  onBan,
   onAddReplies,
   onSelectAll,
   onClear,
@@ -73,7 +73,7 @@ export function SelectionBar({
         <Action className="remove" icon={<Trash2 size={18} />} label="Remove" hint="Ctrl+1-9" onClick={onRemove} />
         <Action className="spam" icon={<AlertCircle size={18} />} label="Spam" hint={keyLabel(keymap.spam)} onClick={onSpam} />
         <Action className="lock" icon={<Lock size={18} />} label="Lock" hint={keyLabel(keymap.lock)} onClick={onLock} />
-        <Action className="ignore" icon={<EyeOff size={18} />} label="Ignore" hint={keyLabel(keymap.ignoreReports)} onClick={onIgnoreReports} />
+        <Action className="ban" icon={<Ban size={18} />} label="Ban" hint="" onClick={onBan} />
       </div>
       <p className="selection-bar-hint">Tap items to add them. Hold a comment to select it with its replies.</p>
     </footer>
